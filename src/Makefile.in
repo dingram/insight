@@ -143,6 +143,8 @@ target_alias = @target_alias@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 insight_SOURCES = insight.c \
+                debug.h \
+                insight.h \
 								bplus.c \
                 bplus.h \
 								bplus_debug.h \
