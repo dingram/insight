@@ -12,7 +12,8 @@ AC_PROG_CC
 # check for libraries
 # check for headers
 AC_HEADER_STDC
-AC_CHECK_HEADERS([errno.h fcntl.h stddef.h stdlib.h string.h unistd.h])
+AC_HEADER_DIRENT
+AC_CHECK_HEADERS([errno.h fcntl.h stddef.h stdlib.h string.h sys/statfs.h sys/statvfs.h sys/vfs.h syslog.h unistd.h utime.h])
 
 # check for typedefs, structures and compiler characteristics
 AC_C_CONST
@@ -26,11 +27,16 @@ AC_CHECK_MEMBERS([struct stat.st_rdev])
 
 # check for library functions
 AC_FUNC_CLOSEDIR_VOID
+AC_FUNC_LSTAT
+AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
 AC_FUNC_MALLOC
 AC_TYPE_SIGNAL
 AC_FUNC_STAT
 AC_FUNC_UTIME_NULL
-AC_CHECK_FUNCS([memset mkdir rmdir strdup strerror utime])
+AC_CHECK_FUNCS([memset mkdir rmdir setenv strdup strerror utime])
+
+# set up defualt CFLAGS
+AC_SUBST([CFLAGS],["${CFLAGS} -D_FILE_OFFSET_BITS=64 -Wall -W"])
 
 # option: debug mode
 AC_MSG_CHECKING(whether to build with debug information)
@@ -39,7 +45,7 @@ debugmode=no
 AC_ARG_ENABLE(debug,
               AC_HELP_STRING(
                              [--enable-debug],
-                             [enable debug mode (default=no)]
+                             [enable debug mode (@<:@default=no@:>@)]
                             ),
               debugmode="$enableval"
              )
