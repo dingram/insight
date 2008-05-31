@@ -68,7 +68,7 @@ AC_CHECK_LIB([fuse],[fuse_main],,[
 
 # output files
 AC_CONFIG_HEADERS([config.h])
-AC_CONFIG_FILES([Makefile src/Makefile])
+AC_CONFIG_FILES([Doxyfile Makefile src/Makefile])
 
 # do it
 AC_OUTPUT

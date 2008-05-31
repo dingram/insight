@@ -1,1 +1,2 @@
 SUBDIRS = src
+MAINTAINERCLEANFILES = $(srcdir)/docs
