@@ -68,13 +68,13 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
 
 /** Node in the tree */
 typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
-  unsigned long magic;            /**< Magic number 0xce11b10c */
-  short         leaf;             /**< 0x01 if this node is a leaf node, 0x00 otherwise */
-  short         keycount;         /**< The number of keys in this node */
-  fileptr       ptrs[ORDER];      /**< Addresses of child nodes if not leaf, or of data nodes and next sibling (index 0) if leaf */
-  tkey          keys[ORDER-1];    /**< The keys stored in this node */
-                                  /** unused space */
-  char          unused[TREEBLOCK_SIZE - sizeof(unsigned long) - 2*sizeof(short) - ORDER*(sizeof(fileptr)) - (ORDER-1)*(sizeof(tkey))];
+  unsigned long  magic;            /**< Magic number 0xce11b10c */
+  unsigned short leaf;             /**< 0x01 if this node is a leaf node, 0x00 otherwise */
+  unsigned short keycount;         /**< The number of keys in this node */
+  fileptr        ptrs[ORDER];      /**< Addresses of child nodes if not leaf, or of data nodes and next sibling (index 0) if leaf */
+  tkey           keys[ORDER-1];    /**< The keys stored in this node */
+                                   /** unused space */
+  char           unused[TREEBLOCK_SIZE - sizeof(unsigned long) - 2*sizeof(short) - ORDER*(sizeof(fileptr)) - (ORDER-1)*(sizeof(tkey))];
 } tnode;
 
 /** Data block in the tree */

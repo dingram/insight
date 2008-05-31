@@ -54,7 +54,11 @@ static int   insight_statvfs(const char *path, struct statvfs *stbuf);
 static int   insight_release(const char *path, struct fuse_file_info *fi);
 static int   insight_fsync(const char *path, int isdatasync, struct fuse_file_info *fi);
 static int   insight_access(const char *path, int mode);
+#if FUSE_VERSION >= 26
 static void *insight_init(struct fuse_conn_info *conn);
+#else
+static void *insight_init(void);
+#endif
 
 /* static */ struct insight insight;
 
@@ -161,6 +165,9 @@ static int insight_getattr(const char *path, struct stat *stbuf)
 
 static int insight_readlink(const char *path, char *buf, size_t size)
 {
+  (void) path;
+  (void) buf;
+  (void) size;
   return 0;
 }
 
@@ -173,8 +180,8 @@ static int insight_readdir(const char *path, void *buf,
   tnode node;
   int i;
 
-  DEBUG("readdir(path=\"%s\", buf=%p, offset=%lu)", path, buf, offset);
-  if (strcmp(path, "/") != 0 && !tree_search(path+1)) {
+  DEBUG("readdir(path=\"%s\", buf=%p, offset=%lld)", path, buf, offset);
+  if (strcmp(path, "/") != 0 && !tree_search((char*)(path+1))) {
     return -ENOENT;
   }
 
@@ -203,6 +210,10 @@ static int insight_readdir(const char *path, void *buf,
 
 static int insight_mknod(const char *path, mode_t mode, dev_t rdev)
 {
+  (void) path;
+  (void) mode;
+  (void) rdev;
+
   return -ENOSPC;
 }
 
@@ -212,59 +223,77 @@ static int insight_mkdir(const char *path, mode_t mode)
   tdata datan;
 
   DEBUG("Called upon to create directory \"%s\"", path);
-  if (tree_search(path+1)) {
+  if (tree_search((char*)(path+1))) {
     DEBUG("Tag \"%s\" already exists", path+1);
     return -EEXIST;
   }
 
   initDataNode(&datan);
-  if (!tree_insert(path+1, &datan)) {
+  if (!tree_insert((char*)(path+1), &datan)) {
+    return -ENOSPC;
   }
-  return -ENOSPC;
+  return 0;
 }
 
 static int insight_unlink(const char *path)
 {
+  (void) path;
   return -ENOENT;
 }
 
 static int insight_rmdir(const char *path)
 {
+  (void) path;
   return -ENOENT;
 }
 
 static int insight_rename(const char *from, const char *to)
 {
+  (void) from;
+  (void) to;
   return -ENOENT;
 }
 
 static int insight_symlink(const char *from, const char *to)
 {
+  (void) from;
+  (void) to;
   return -EPERM;
 }
 
 static int insight_link(const char *from, const char *to)
 {
+  (void) from;
+  (void) to;
   return -EPERM;
 }
 
 static int insight_chmod(const char *path, mode_t mode)
 {
+  (void) path;
+  (void) mode;
   return -EPERM;
 }
 
 static int insight_chown(const char *path, uid_t uid, gid_t gid)
 {
+  (void) path;
+  (void) uid;
+  (void) gid;
   return -EPERM;
 }
 
 static int insight_truncate(const char *path, off_t size)
 {
+  (void) path;
+  (void) size;
   return -EPERM;
 }
 
 static int insight_utime(const char *path, struct utimbuf *buf)
 {
+  (void) path;
+  (void) buf;
   return 0;
 }
 
@@ -289,12 +318,12 @@ static int insight_open(const char *path, struct fuse_file_info *fi)
 static int insight_read(const char *path, char *buf, size_t size,
             off_t offset, struct fuse_file_info *fi)
 {
-  DEBUG("Read on path \"%s\"\n", path);
-  size_t len;
+  (void) path;
+  (void) buf;
+  (void) size;
+  (void) offset;
   (void) fi;
-  if (strcmp(path, "/insightFS") != 0) {
-    return -ENOENT;
-  }
+  DEBUG("Read on path \"%s\"\n", path);
 
   return -EPERM;
 }
@@ -302,35 +331,56 @@ static int insight_read(const char *path, char *buf, size_t size,
 static int insight_write(const char *path, const char *buf, size_t size,
              off_t offset, struct fuse_file_info *fi)
 {
+  (void) path;
+  (void) buf;
+  (void) size;
+  (void) offset;
+  (void) fi;
   return -EPERM;
 }
 
 static int insight_statvfs(const char *path, struct statvfs *stbuf)
 {
+  (void) path;
+  (void) stbuf;
   return 0;
 }
 
 static int insight_release(const char *path, struct fuse_file_info *fi)
 {
+  (void) path;
+  (void) fi;
   return 0;
 }
 
 static int insight_fsync(const char *path, int isdatasync,
              struct fuse_file_info *fi)
 {
+  (void) path;
+  (void) isdatasync;
+  (void) fi;
   return -EPERM;
 }
 
 static int insight_access(const char *path, int mode)
 {
+  (void) path;
+  (void) mode;
   return -EPERM;
 }
 
+#if FUSE_VERSION >= 26
 static void *insight_init(struct fuse_conn_info *conn)
 {
-  return 0;
+  (void) conn;
+  return NULL;
 }
-
+#else
+static void *insight_init(void)
+{
+  return NULL;
+}
+#endif
 
 
 
@@ -416,7 +466,7 @@ static int insight_opt_proc(void *data, const char *arg, int key, struct fuse_ar
   return 0;
 }
 
-static int insight_process_args(struct fuse_args *args) {
+static void insight_process_args(struct fuse_args *args) {
   fuse_opt_add_arg(args, "-ofsname=insight");      /* filesystem name */
   fuse_opt_add_arg(args, "-ouse_ino,readdir_ino"); /* XXX: honour the inode fields in getattr() and fill_dir() */
   fuse_opt_add_arg(args, "-oallow_other");         /* allow non-root users to access the file system */

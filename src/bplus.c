@@ -68,7 +68,7 @@ static int tree_format () {
 static int tree_format_free (fileptr start, fileptr size) {
   freeblock f;
   fileptr result;
-  int i;
+  unsigned int i;
 
   DEBUGMSG("Zeroing free block structure");
   initFreeNode(&f);
@@ -269,7 +269,7 @@ int tree_open (char *path) {
  */
 int tree_close (void) {
 #ifdef TREE_STATS_ENABLED
-  int i;
+  unsigned int i;
 #endif
   DEBUGMSG("Closing tree");
   if (tree_fp >= 0) {
@@ -817,10 +817,10 @@ fileptr tree_sub_search(fileptr root, char *key) {
 /*
  * insert a key into the given node
  */
-static int tree_insert_key(tnode *node, int keyindex, char **key, fileptr *ptr) {
+static int tree_insert_key(tnode *node, unsigned int keyindex, char **key, fileptr *ptr) {
   fileptr ptrs[ORDER+1];
   tkey    keys[ORDER];
-  int     k, newcount, countdiff;
+  unsigned int k, newcount, countdiff;
 
   DEBUG("Inserting key \"%s\"", *key);
 
@@ -828,12 +828,12 @@ static int tree_insert_key(tnode *node, int keyindex, char **key, fileptr *ptr) 
   zero_mem(keys, sizeof(char)*TREEKEY_SIZE*ORDER);
 
   /* How many keys will be in this node when we're done? */
-  newcount  = node->keycount+1 < ORDER ? node->keycount+1 : ORDER/2;
+  newcount  = (unsigned int)(node->keycount+1) < (unsigned int)(ORDER) ? (unsigned int)(node->keycount+1) : (unsigned int)(ORDER/2);
   countdiff = node->keycount+1 - newcount; /* 0 unless we must split */
 
   DEBUGMSG("Copying keys to insertion point");
   /* Copy keys from halfway up to insertion point in case we must split */
-	for(k = ORDER/2; k < keyindex; k++) {
+	for(k = (unsigned int)(ORDER/2); k < keyindex; k++) {
 		strncpy(keys[k], node->keys[k], TREEKEY_SIZE);
 		ptrs[k+1] = node->ptrs[k+1];
 	}
@@ -860,7 +860,7 @@ static int tree_insert_key(tnode *node, int keyindex, char **key, fileptr *ptr) 
 
   errno=0;
   if (countdiff) {
-    int s, d;
+    unsigned int s, d;
     int result;
     tnode newnode;
     initTreeNode(&newnode);
@@ -1143,7 +1143,7 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
           leftsteal = (lsib.keycount - dblock.keycount)/2;
           DUMPINT(leftsteal);
           /* make sure we don't try to steal too many! */
-          if (leftsteal > ORDER-1-dblock.keycount)
+          if ((unsigned int)leftsteal > ORDER-1-dblock.keycount)
             leftsteal = ORDER-1-dblock.keycount;
         }
         DEBUG("We can steal %d key(s) from left sibling.", leftsteal);
@@ -1158,7 +1158,7 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
           rightsteal = (rsib.keycount - dblock.keycount)/2;
           DUMPINT(rightsteal);
           /* make sure we don't try to steal too many! */
-          if (rightsteal > ORDER-1-dblock.keycount)
+          if ((unsigned int)rightsteal > ORDER-1-dblock.keycount)
             rightsteal = ORDER-1-dblock.keycount;
         }
         DEBUG("We can steal %d key(s) from right sibling.", rightsteal);

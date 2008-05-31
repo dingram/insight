@@ -70,21 +70,21 @@ static cache_ent *block_cache;
  *  STATIC PROTOTYPES
  ************************************************************************** */
 
-static int      tree_format        ();                                                    /* format the tree store, initialising superblock and free space */
-static int      tree_format_free   (fileptr start, fileptr size);                         /* set up free list data                                         */
-static fileptr  tree_alloc         (void);                                                /* allocate a block and return its index                         */
-static int      tree_free          (fileptr block);                                       /* free a block                                                  */
-static int      tree_find_key      (tnode *node, char *key);                              /* find a key in the given node                                  */
-static int      tree_insert_key    (tnode *node, int keyindex, char **key, fileptr *ptr); /* insert a key into the given node                              */
-static int      tree_insert_recurse(fileptr root, char **key, fileptr *ptr);              /* recursively insert the given pointer into the tree            */
-static int      _tree_write        (fileptr block, tblock *data);                         /* actually write a block (don't touch cache)                    */
+static int      tree_format        ();
+static int      tree_format_free   (fileptr start, fileptr size);
+static fileptr  tree_alloc         (void);
+static int      tree_free          (fileptr block);
+static int      tree_find_key      (tnode *node, char *key);
+static int      tree_insert_key    (tnode *node, unsigned int keyindex, char **key, fileptr *ptr);
+static int      tree_insert_recurse(fileptr root, char **key, fileptr *ptr);
+static int      _tree_write        (fileptr block, tblock *data);
 #ifdef TREE_CACHE_ENABLED
-static int      tree_cache_init    ();                                                    /* initialise the cache                                          */
-static int      tree_cache_flush   (int clear);                                           /* flush all cache contents to disk                              */
-static int      tree_cache_drop    ();                                                    /* de-allocate the cache                                         */
-static tblock * tree_cache_get     (fileptr block);                                       /* get block from cache                                          */
-static int      tree_cache_put     (fileptr block, tblock *data);                         /* put block into cache (update if exists)                       */
-static void     tree_cache_del     (fileptr block);                                       /* remove block from cache                                       */
+static int      tree_cache_init    ();
+static int      tree_cache_flush   (int clear);
+static int      tree_cache_drop    ();
+static tblock * tree_cache_get     (fileptr block);
+static int      tree_cache_put     (fileptr block, tblock *data);
+static void     tree_cache_del     (fileptr block);
 #endif
 
 /** Internal storage of file handle for tree file */
