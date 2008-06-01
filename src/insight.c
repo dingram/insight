@@ -196,23 +196,35 @@ static int insight_readdir(const char *path, void *buf,
   tnode node;
   int i;
   char *canon_path = get_canonical_path(path);
-  fileptr tree_root=0;
 
   DEBUG("readdir(path=\"%s\", buf=%p, offset=%lld)", canon_path, buf, offset);
 
+  DEBUG("Getting root");
+  fileptr tree_root=tree_get_root();
   int subtag=0;
+  tdata datan;
+  DEBUG("Calling rindex()");
+  char *last_tag=rindex(canon_path, '/');
 
-  if (last_char_in(canon_path)==INSIGHT_SUBKEY_IND_C) {
+  DEBUG("Checking last_tag");
+  if (!last_tag) last_tag=canon_path;
+  else           last_tag++;
+
+  DEBUG("Removing subkey indicators");
+  while (last_char_in(last_tag)==INSIGHT_SUBKEY_IND_C) {
     DEBUG("Subtag");
-    last_char_in(canon_path)='\0';
+    last_char_in(last_tag)='\0';
     subtag=1;
   }
 
-  if (strcmp(canon_path, "/")!=0 && (tree_root=get_tag(canon_path+1))==0) {
-    DEBUG("Tag \"%s\" not found\n", canon_path+1);
+  DEBUG("Last tag: \"%s\"", last_tag);
+
+  DEBUG("Calling get_tag");
+  if (strcmp(last_tag, "")!=0 && (tree_root=get_tag(last_tag))==0) {
+    DEBUG("Tag \"%s\" not found", last_tag);
     return -ENOENT;
   }
-  DEBUG("Found tag \"%s\"; tree root now %lu", canon_path+1, tree_root);
+  DEBUG("Found tag \"%s\"; tree root now %lu", last_tag, tree_root);
 
   if (!subtag) {
     tree_root=tree_get_root();
