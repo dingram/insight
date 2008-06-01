@@ -28,10 +28,13 @@
  * Your fair use and other rights are in no way affected by the above.
  */
 
-#include "insight.h"
-#include "bplus.h"
+#include <insight.h>
+#include <bplus.h>
+#ifndef _DEBUG
 #define _DEBUG
-#include "debug.h"
+#endif
+#include <debug.h>
+#include <path_helpers.h>
 
 static int   insight_getattr(const char *path, struct stat *stbuf);
 static int   insight_readlink(const char *path, char *buf, size_t size);
@@ -54,6 +57,7 @@ static int   insight_statvfs(const char *path, struct statvfs *stbuf);
 static int   insight_release(const char *path, struct fuse_file_info *fi);
 static int   insight_fsync(const char *path, int isdatasync, struct fuse_file_info *fi);
 static int   insight_access(const char *path, int mode);
+static void  insight_destroy(void *arg);
 #if FUSE_VERSION >= 26
 static void *insight_init(struct fuse_conn_info *conn);
 #else
@@ -92,12 +96,13 @@ static struct fuse_operations insight_oper = {
   .open       = insight_open,
   .read       = insight_read,
   .mkdir      = insight_mkdir,
+  .destroy    = insight_destroy,
+  .rmdir      = insight_rmdir,
 #if 0
   .readlink   = insight_readlink,
   .mknod      = insight_mknod,
   .symlink    = insight_symlink,
   .unlink     = insight_unlink,
-  .rmdir      = insight_rmdir,
   .rename     = insight_rename,
   .link       = insight_link,
   .chmod      = insight_chmod,
@@ -129,11 +134,17 @@ static int usage_already_printed = 0;
 
 static int insight_getattr(const char *path, struct stat *stbuf)
 {
-  char *pathdup = strdup(path);
+  char *canon_path = get_canonical_path(path);
+  if (errno) {
+    DEBUG("Error in get_canonical_path.");
+    return -ENOENT;
+  }
 
-  DEBUG("Getattr called on path \"%s\"", pathdup);
-  memset(stbuf, 0, sizeof(struct stat));
-  if (strcmp(pathdup, "/")==0) {
+  DEBUG("Getattr called on path \"%s\"", canon_path);
+
+  /* steal a default stat structure */
+  memcpy(stbuf, &insight.mountstat, sizeof(struct stat));
+  if (strcmp(canon_path, "/")==0) {
     DEBUG("Getattr called on root path");
     stbuf->st_mode = S_IFDIR | 0755;
     stbuf->st_nlink = tree_key_count();
@@ -141,20 +152,25 @@ static int insight_getattr(const char *path, struct stat *stbuf)
     return 0;
   }
 
-  if (rindex(pathdup, ':') && rindex(pathdup, ':') == rindex(pathdup, '/')+1) {
-    /* there's a colon at the end */
-    DEBUG("Getattr on a colon directory");
+  if (strlen(canon_path)>2 && last_char_in(canon_path)==INSIGHT_SUBKEY_IND_C && canon_path[strlen(canon_path)-2]=='/') {
+    /* just a subkey indicator directory */
+    DEBUG("Getattr on a subkey indicator directory");
     stbuf->st_mode = S_IFDIR | 0555;
     stbuf->st_nlink = 1;
-    stbuf->st_ino = -1;
+    stbuf->st_ino = 2;
   } else {
-    if (pathdup[strlen(pathdup)-1]==':') {
-      pathdup[strlen(pathdup)-1]='\0';
-    } else if (!tree_search(pathdup+1)) {
-      DEBUG("Tag \"%s\" not found", pathdup+1);
+    int subtag=0;
+
+    if (last_char_in(canon_path)==INSIGHT_SUBKEY_IND_C) {
+      last_char_in(canon_path)='\0';
+      subtag=1;
+    }
+
+    if (!get_last_tag(canon_path+1)) {
+      DEBUG("Tag \"%s\" not found\n", canon_path+1);
       return -ENOENT;
     }
-    DEBUG("Found tag \"%s\"", pathdup+1);
+    DEBUG("Found tag \"%s\"", canon_path+1);
     stbuf->st_mode = S_IFDIR | 0555;
     stbuf->st_nlink = 1;
     stbuf->st_ino = -1;
@@ -179,26 +195,59 @@ static int insight_readdir(const char *path, void *buf,
   (void) fi;
   tnode node;
   int i;
+  char *canon_path = get_canonical_path(path);
+  fileptr tree_root=0;
 
-  DEBUG("readdir(path=\"%s\", buf=%p, offset=%lld)", path, buf, offset);
-  if (strcmp(path, "/") != 0 && !tree_search((char*)(path+1))) {
+  DEBUG("readdir(path=\"%s\", buf=%p, offset=%lld)", canon_path, buf, offset);
+
+  int subtag=0;
+
+  if (last_char_in(canon_path)==INSIGHT_SUBKEY_IND_C) {
+    DEBUG("Subtag");
+    last_char_in(canon_path)='\0';
+    subtag=1;
+  }
+
+  if (strcmp(canon_path, "/")!=0 && (tree_root=get_tag(canon_path+1))==0) {
+    DEBUG("Tag \"%s\" not found\n", canon_path+1);
     return -ENOENT;
+  }
+  DEBUG("Found tag \"%s\"; tree root now %lu", canon_path+1, tree_root);
+
+  if (!subtag) {
+    tree_root=tree_get_root();
+    DEBUG("Tree root reset to %lu", tree_root);
   }
 
   DEBUG("Filling directory");
   filler(buf, ".", NULL, 0);
   filler(buf, "..", NULL, 0);
-  if (tree_get_min(&node))
+
+  if (tree_sub_get_min(tree_root, &node)) {
+    DEBUG("tree_sub_get_min() failed\n");
     return -EIO;
-  if (strcmp(path, "/") != 0) {
-    /* subkeys of this key */
-    filler(buf, ":", NULL, 0);
+  }
+
+  if (node.magic != MAGIC_TREENODE) {
+    if (subtag)
+      DEBUG("No subtags");
+    else
+      DEBUG("Something went very, very wrong\n");
+    return 0;
+  }
+
+  if (strcmp(path, "/") != 0 && !subtag) {
+    /* add special directory containing subkeys of this key */
+    DEBUG("Adding subkey indicator directory");
+    filler(buf, INSIGHT_SUBKEY_IND, NULL, 0);
   }
   do {
     for (i=0; i<node.keycount; i++) {
+      DEBUG("Adding key \"%s\" to directory listing", node.keys[i]);
       filler(buf, node.keys[i], NULL, 0);
     }
     if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
+      DEBUG("I/O error reading block\n");
       return -EIO;
     }
   } while (node.ptrs[0]);
@@ -214,24 +263,71 @@ static int insight_mknod(const char *path, mode_t mode, dev_t rdev)
   (void) mode;
   (void) rdev;
 
-  return -ENOSPC;
+  return -EPERM;
 }
 
 static int insight_mkdir(const char *path, mode_t mode)
 {
   (void) mode;
-  tdata datan;
 
-  DEBUG("Called upon to create directory \"%s\"", path);
-  if (tree_search((char*)(path+1))) {
-    DEBUG("Tag \"%s\" already exists", path+1);
+  char *newdir = strlast(path, '/');
+  char *dup = strdup(path);
+  char *canon_parent = rindex(dup, '/');
+  *canon_parent='\0';
+  canon_parent = get_canonical_path(dup);
+  ifree(dup);
+
+  if (canon_parent[0]=='/')
+    canon_parent++;
+
+  while (last_char_in(newdir)==INSIGHT_SUBKEY_IND_C) {
+    DEBUG("Subkey indicator removed from end of new directory name");
+    last_char_in(newdir)='\0';
+  }
+
+  DEBUG("Asked to create directory \"%s\" in parent \"%s\"", newdir, canon_parent);
+
+  if (strcmp(newdir, INSIGHT_SUBKEY_IND)==0) {
+    DEBUG("Cannot create directories named \"%s\"\n", INSIGHT_SUBKEY_IND);
+    return -EPERM;
+  }
+
+  fileptr tree_root=tree_get_root();
+  int subtag=0;
+  tdata datan;
+  char *parent_tag=rindex(canon_parent, '/');
+
+  if (!parent_tag) parent_tag=canon_parent;
+  else             parent_tag++;
+
+  while (last_char_in(parent_tag)==INSIGHT_SUBKEY_IND_C) {
+    DEBUG("Subtag");
+    last_char_in(parent_tag)='\0';
+    subtag=1;
+  }
+
+  if (strcmp(parent_tag, "")!=0 && (tree_root=get_tag(parent_tag))==0) {
+    DEBUG("Tag \"%s\" not found", parent_tag);
+    return -ENOENT;
+  }
+  DEBUG("Found tag \"%s\"; tree root now %lu", parent_tag, tree_root);
+
+  if (tree_sub_search(tree_root, newdir)) {
+    DEBUG("Tag \"%s\" already exists in parent \"%s\"\n", newdir, parent_tag);
     return -EEXIST;
   }
 
+  DEBUG("About to insert \"%s\" into parent \"%s\"", newdir, parent_tag);
+
   initDataNode(&datan);
-  if (!tree_insert((char*)(path+1), &datan)) {
+  if (!tree_sub_insert(tree_root, newdir, &datan)) {
+    DEBUG("Tree insertion failed\n");
     return -ENOSPC;
   }
+  DEBUG("Successfully inserted \"%s\" into parent \"%s\"", newdir, parent_tag);
+
+  DEBUG("Returning\n");
+
   return 0;
 }
 
@@ -243,8 +339,7 @@ static int insight_unlink(const char *path)
 
 static int insight_rmdir(const char *path)
 {
-  (void) path;
-  return -ENOENT;
+  return -EPERM;
 }
 
 static int insight_rename(const char *from, const char *to)
@@ -501,7 +596,7 @@ static int insight_open_store() {
       int storelen = strlen(getenv("HOME")) + strlen("/.insightfs/tree") + 1; /* +1 for null */
       char *insightdir = calloc(strlen(getenv("HOME")) + strlen("/.insightfs") + 1, 1);
 
-      if (insight.treestore) free(insight.treestore);
+      if (insight.treestore) ifree(insight.treestore);
       insight.treestore = calloc(storelen, sizeof(char));
       strcat(insight.treestore, getenv("HOME"));
       strcat(insight.treestore, "/.insightfs/tree");
@@ -573,6 +668,19 @@ static int insight_open_store() {
   return 0;
 }
 
+/**
+ * Cleanup function run when the file system is unmounted.
+ *
+ * @param arg An argument passed by FUSE. Ignored.
+ */
+void insight_destroy(void *arg)
+{
+  (void) arg;
+	PMSG(LOG_ERR, "Cleaning up and exiting");
+  tree_close();
+	FMSG(LOG_ERR, "Tree store closed");
+}
+
 int main(int argc, char *argv[]) {
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
   int res;
@@ -596,12 +704,16 @@ int main(int argc, char *argv[]) {
 
   /* checking if mount point exists or can be created */
   struct stat mst;
-  if ((lstat(insight.mountpoint, &mst) == -1) && (errno == ENOENT)) {
+  if ((lstat(insight.mountpoint, &insight.mountstat) == -1) && (errno == ENOENT)) {
     if (mkdir(insight.mountpoint, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {
       usage(insight.progname);
       if (!insight.quiet)
         fprintf(stderr, "\n Mountpoint %s does not exist and can't be created!\n\n", insight.mountpoint);
       exit(1);
+    }
+    if (lstat(insight.mountpoint, &insight.mountstat) == -1) {
+      if (!insight.quiet)
+        fprintf(stderr, "\n Mountpoint %s does not exist and doesn't exist after creation!\n\n", insight.mountpoint);
     }
   }
 
@@ -621,10 +733,10 @@ int main(int argc, char *argv[]) {
     exit(2);
   }
 
-  DEBUG("Fuse options:");
+  FMSG(LOG_DEBUG, "Fuse options:");
   int fargc = args.argc;
   while (fargc) {
-    DEBUG("%.2d: %s", fargc, args.argv[fargc]);
+    FMSG(LOG_DEBUG, "%.2d: %s", fargc, args.argv[fargc]);
     fargc--;
   }
 

@@ -700,9 +700,21 @@ int tree_sub_key_count(fileptr root) {
 }
 
 /**
- * Get the <strong>node</strong> block associated with the minimum key in the tree.
+ * Get the tree root index.
  *
- * @param[out] node A pointer to the minimum node block in the tree rooted at \a root.
+ * @returns The index of the ultimate root of the tree, as given by the
+ * superblock.
+ */
+fileptr tree_get_root() {
+  return tree_sb->root_index;
+}
+
+/**
+ * Get the <strong>node</strong> block associated with the minimum key in the
+ * tree.
+ *
+ * @param[out] node A pointer to the minimum node block in the tree rooted at
+ * \a root.
  * @returns See tree_sub_get_min()
  */
 int tree_get_min(tnode *node) {
@@ -710,16 +722,32 @@ int tree_get_min(tnode *node) {
 }
 
 /**
- * Get the <strong>node</strong> block associated with the minimum key in the given tree.
+ * Get the <strong>node</strong> block associated with the minimum key in the
+ * given tree.
  *
  * @param[in]  root The root of the subtree to search
- * @param[out] node A pointer to the minimum node block in the tree rooted at \a root.
+ * @param[out] node A pointer to the minimum node block in the tree rooted at
+ * \a root.
  * @retval 0 Success.
  * @retval EIO I/O error while reading a block from disk.
  */
 int tree_sub_get_min(fileptr root, tnode *node) {
+  DEBUG("tree_sub_get_min(%lu)", root);
+  if (!root)
+    return 0;
+
   if (tree_read(root, (tblock*)node))
     return EIO;
+
+  /* check node is cell block */
+  if (node->magic == MAGIC_DATANODE) {
+    DEBUGMSG("Starting search at data node; using subkeys");
+    root=((tdata*)node)->subkeys;
+    return tree_sub_get_min(root, node);
+  } else if (node->magic != MAGIC_TREENODE) {
+    DEBUG("Invalid magic number (%lX)", node->magic);
+    return EBADF;
+  }
 
   while (!node->leaf) {
     root=node->ptrs[0];

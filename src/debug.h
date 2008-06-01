@@ -23,8 +23,8 @@
 #ifdef _DEBUG
 # define DEBUG(f, ...)  PMSG(LOG_DEBUG, f,## __VA_ARGS__)
 # define DEBUGMSG(x)    DEBUG("%s", x)
-# define DUMPINT(x)     DEBUG("%s = %d\n", #x, x)
-# define DUMPSTR(x)     DEBUG("%s = %s\n", #x, x)
+# define DUMPINT(x)     DEBUG("%s = %d", #x, x)
+# define DUMPSTR(x)     DEBUG("%s = \"%s\"", #x, x)
 #else
 # define DEBUG(f, ...)
 # define DEBUGMSG(x)

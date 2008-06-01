@@ -71,6 +71,29 @@
 #include <fuse.h>
 #include <fuse/fuse_opt.h>
 
+/*
+ * NOTE:
+ * -----
+ * Subkey separator and indicator characters should NOT be from the set:
+ *    < > : " / \ | * ?
+ * for compatability with Windows systems.
+ */
+
+/** String used to separate subkey parts (e.g. the "." in "type.music") */
+#define INSIGHT_SUBKEY_SEP "`"
+
+/** String used to indicate subkey to follow (e.g. the ":" in "/type:") */
+#define INSIGHT_SUBKEY_IND ":"
+
+/** Character used to separate subkey parts (e.g. the "." in "type.music") */
+#define INSIGHT_SUBKEY_SEP_C '`'
+
+/** Character used to indicate subkey to follow (e.g. the ":" in "/type:") */
+#define INSIGHT_SUBKEY_IND_C ':'
+
+/** Macro for last character in a string */
+#define last_char_in(x) ((x)[strlen(x)-1])
+
 /**
  * Command line options
  */
@@ -85,6 +108,7 @@ struct insight {
   char  *progname;      /**< "insight" */
   char  *mountpoint;    /**< Where insight has been mounted */
   char  *treestore;     /**< Path to the tree storage file */
+  struct stat mountstat; /**< lstat() results for mountpoint */
 };
 
 /*extern struct insight insight;*/
