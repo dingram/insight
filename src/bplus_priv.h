@@ -2,7 +2,7 @@
 #define _BPLUS_PRIV_H
 
 /** Enable caching functions */
-#undef TREE_CACHE_ENABLED
+#define TREE_CACHE_ENABLED
 
 /** Enable disk statistics */
 #define TREE_STATS_ENABLED

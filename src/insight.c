@@ -574,9 +574,9 @@ static int insight_opt_proc(void *data, const char *arg, int key, struct fuse_ar
 }
 
 static void insight_process_args(struct fuse_args *args) {
-  fuse_opt_add_arg(args, "-ofsname=insight");      /* filesystem name */
-  fuse_opt_add_arg(args, "-ouse_ino,readdir_ino"); /* XXX: honour the inode fields in getattr() and fill_dir() */
-  fuse_opt_add_arg(args, "-oallow_other");         /* allow non-root users to access the file system */
+  fuse_opt_add_arg(args, "-ofsname=insight");       /* filesystem name */
+  fuse_opt_add_arg(args, "-ouse_ino,readdir_ino");  /* honour the inode fields in getattr() and fill_dir() */
+  fuse_opt_add_arg(args, "-oallow_other");          /* allow non-root users to access the file system */
 
   if (insight.singlethread) {
     if (!insight.quiet)

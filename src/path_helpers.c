@@ -215,18 +215,25 @@ char *get_canonical_path(const char *path) {
  * otherwise.
  */
 fileptr get_tag(const char *tagname) {
+  char *dup=strdup(tagname);
   errno=0;
+
+  while (last_char_in(dup)==INSIGHT_SUBKEY_IND_C) {
+    DEBUG("Removing trailing %s character", INSIGHT_SUBKEY_IND);
+    last_char_in(dup)='\0';
+  }
 
   DEBUG("Tag to find: %s", tagname);
 
   /* if it's empty, then nothing to do. */
-  if (!tagname || !strlen(tagname)) {
+  if (!dup || !strlen(dup)) {
     DEBUG("Null tag");
+    ifree(dup);
     return 0;
   }
 
   int sepcount, i;
-  char **bits = strsplit(tagname, INSIGHT_SUBKEY_SEP_C, &sepcount);
+  char **bits = strsplit(dup, INSIGHT_SUBKEY_SEP_C, &sepcount);
   fileptr cur_root = tree_get_root();
 
   for (i=0; i<sepcount; i++) {
@@ -236,12 +243,17 @@ fileptr get_tag(const char *tagname) {
     cur_root = tree_sub_search(cur_root, bits[i]);
     if (!cur_root) {
       DEBUG("Could not find tag!");
-      ifree(bits);
-      return 0;
+      break;
     }
   }
 
+  DEBUG("Freeing dup");
+  ifree(dup);
+
   DEBUG("Freeing bits");
+  for (sepcount--;sepcount>=0; sepcount--)
+    ifree(bits[sepcount]);
+  DEBUG("Freeing bits top-level");
   ifree(bits);
 
   return cur_root;
@@ -269,23 +281,30 @@ fileptr get_last_tag(const char *path) {
 }
 
 /**
- * Validate a path by ensuring each element exists. This may require checking
- * for subtags. Any trailing INSIGHT_SUBKEY_IND characters are ignored.
+ * Validate a path by ensuring each element is a valid tag. This may require
+ * checking for subtags. Any trailing INSIGHT_SUBKEY_IND characters are
+ * ignored.
  *
  * @param path The path to be validated.
  * @returns Non-zero if the path is valid, zero if the path is invalid.
  */
 int validate_path(const char *path) {
   // TODO: split path by '/' and then check each tag, splitting the tag as required.
-  int count;
+  int count, i, isvalid=1;
   char **bits = strsplit(path, '/', &count);
+
+  for (i=0; i<count && isvalid; i++) {
+    DEBUG("Examining tag \"%s\"", bits[i]);
+    isvalid &= get_tag(bits[i])?1:0;
+    DEBUG(isvalid?"Valid":"Invalid!");
+  }
 
   DEBUG("Freeing bits");
   for (count--;count>=0; count--) {
-    ifree(bits[i]);
+    ifree(bits[count]);
   }
   DEBUG("Freeing bits top-level");
   ifree(bits);
-  DEBUG("Returning");
-  return 1;
+  DEBUG("Returning %d", isvalid);
+  return isvalid;
 }

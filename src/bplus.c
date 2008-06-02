@@ -298,8 +298,8 @@ int tree_close (void) {
           DEBUG("Stats[%4u]: %5u reads; %5u writes; %5u cache reads; %5u cache writes", i, tree_stats[i].reads, tree_stats[i].writes, tree_stats[i].cache_reads, tree_stats[i].cache_writes);
           total_reads        += tree_stats[i].reads;
           total_writes       += tree_stats[i].writes;
-          total_cache_reads  += tree_cache_stats[i].cache_reads;
-          total_cache_writes += tree_cache_stats[i].cache_writes;
+          total_cache_reads  += tree_stats[i].cache_reads;
+          total_cache_writes += tree_stats[i].cache_writes;
         }
 #else
         if (tree_stats[i].reads || tree_stats[i].writes) {
