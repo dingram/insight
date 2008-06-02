@@ -269,11 +269,23 @@ fileptr get_last_tag(const char *path) {
 }
 
 /**
- * Validate a path by ensuring each element exists. This may require checking for subtags. Any trailing INSIGHT_SUBKEY_IND characters are ignored.
+ * Validate a path by ensuring each element exists. This may require checking
+ * for subtags. Any trailing INSIGHT_SUBKEY_IND characters are ignored.
  *
  * @param path The path to be validated.
  * @returns Non-zero if the path is valid, zero if the path is invalid.
  */
 int validate_path(const char *path) {
+  // TODO: split path by '/' and then check each tag, splitting the tag as required.
+  int count;
+  char **bits = strsplit(path, '/', &count);
+
+  DEBUG("Freeing bits");
+  for (count--;count>=0; count--) {
+    ifree(bits[i]);
+  }
+  DEBUG("Freeing bits top-level");
+  ifree(bits);
+  DEBUG("Returning");
   return 1;
 }
