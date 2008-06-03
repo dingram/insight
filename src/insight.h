@@ -108,6 +108,7 @@ struct insight {
   char  *progname;      /**< "insight" */
   char  *mountpoint;    /**< Where insight has been mounted */
   char  *treestore;     /**< Path to the tree storage file */
+  char  *repository;    /**< Path to the symlink repository */
   struct stat mountstat; /**< lstat() results for mountpoint */
 };
 

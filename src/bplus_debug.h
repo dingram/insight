@@ -13,7 +13,7 @@ static inline void DUMPSB(tsblock *node) {
   printf("  free head:  %lu\n", node->free_head);
 }
 static inline void DUMPNODE(tnode *node) {
-  int i;
+  unsigned int i;
   printf(" [TREE NODE]\n");
   printf("  leaf:     %d\n", node->leaf);
   printf("  keycount: %d\n", node->keycount);

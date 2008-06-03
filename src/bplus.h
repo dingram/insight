@@ -98,7 +98,10 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   short inodecount;           /**< Number of inodes related to this key (not necessarily all stored in this node) */
   short flags;                /**< Flags and other information about this node */
   fileptr subkeys;            /**< Root node of subkeys tree or address of synonym target if \a flags contain \c DATA_FLAGS_SYNONYM */
-  fileptr inodes[INODECOUNT]; /**< List of inodes */
+  union {
+    fileptr inodes[INODECOUNT]; /**< List of inodes */
+    char    target[INODECOUNT*(sizeof(unsigned long)/sizeof(char))]; /**< Synonym target name */
+  };
   fileptr next_inodes;        /**< Address of next block of inodes, or zero if none */
 } tdata;
 
