@@ -142,6 +142,11 @@ static int insight_getattr(const char *path, struct stat *stbuf)
 
   DEBUG("Getattr called on path \"%s\"", canon_path);
 
+  if (!validate_path(canon_path)) {
+    DEBUG("Path does not exist\n");
+    return -ENOENT;
+  }
+
   /* steal a default stat structure */
   memcpy(stbuf, &insight.mountstat, sizeof(struct stat));
   if (strcmp(canon_path, "/")==0) {
@@ -160,18 +165,30 @@ static int insight_getattr(const char *path, struct stat *stbuf)
     stbuf->st_ino = 2;
   } else {
     int subtag=0;
+    fileptr tagdata;
+    tdata dnode;
 
     if (last_char_in(canon_path)==INSIGHT_SUBKEY_IND_C) {
       last_char_in(canon_path)='\0';
       subtag=1;
     }
 
-    if (!get_last_tag(canon_path+1)) {
+    tagdata=get_last_tag(canon_path+1);
+
+    if (!tagdata) {
       DEBUG("Tag \"%s\" not found\n", canon_path+1);
       return -ENOENT;
     }
     DEBUG("Found tag \"%s\"", canon_path+1);
-    stbuf->st_mode = S_IFDIR | 0555;
+    if (tree_read(tagdata, &dnode)) {
+      DEBUG("IO error reading data block");
+      return -EIO;
+    }
+    if (dnode.flags & DATA_FLAGS_SYNONYM) {
+      stbuf->st_mode = S_IFLNK | 0555;
+    } else {
+      stbuf->st_mode = S_IFDIR | 0555;
+    }
     stbuf->st_nlink = 1;
     stbuf->st_ino = -1;
   }
@@ -199,10 +216,14 @@ static int insight_readdir(const char *path, void *buf,
 
   DEBUG("readdir(path=\"%s\", buf=%p, offset=%lld)", canon_path, buf, offset);
 
+  if (!validate_path(canon_path)) {
+    DEBUG("Path does not exist\n");
+    return -ENOENT;
+  }
+
   DEBUG("Getting root");
   fileptr tree_root=tree_get_root();
   int subtag=0;
-  tdata datan;
   DEBUG("Calling rindex()");
   char *last_tag=rindex(canon_path, '/');
 
@@ -275,7 +296,7 @@ static int insight_mknod(const char *path, mode_t mode, dev_t rdev)
   (void) mode;
   (void) rdev;
 
-  return -EPERM;
+  return -EACCES;
 }
 
 static int insight_mkdir(const char *path, mode_t mode)
@@ -298,6 +319,11 @@ static int insight_mkdir(const char *path, mode_t mode)
   }
 
   DEBUG("Asked to create directory \"%s\" in parent \"%s\"", newdir, canon_parent);
+
+  if (!validate_path(canon_parent)) {
+    DEBUG("Path does not exist\n");
+    return -ENOENT;
+  }
 
   if (strcmp(newdir, INSIGHT_SUBKEY_IND)==0) {
     DEBUG("Cannot create directories named \"%s\"\n", INSIGHT_SUBKEY_IND);
@@ -351,7 +377,7 @@ static int insight_unlink(const char *path)
 
 static int insight_rmdir(const char *path)
 {
-  return -EPERM;
+  return -EACCES;
 }
 
 static int insight_rename(const char *from, const char *to)
@@ -419,7 +445,7 @@ static int insight_open(const char *path, struct fuse_file_info *fi)
   }
 
   DEBUG("Everything OK\n");
-  return -EPERM;
+  return -EACCES;
 }
 
 static int insight_read(const char *path, char *buf, size_t size,
@@ -715,7 +741,6 @@ int main(int argc, char *argv[]) {
   }
 
   /* checking if mount point exists or can be created */
-  struct stat mst;
   if ((lstat(insight.mountpoint, &insight.mountstat) == -1) && (errno == ENOENT)) {
     if (mkdir(insight.mountpoint, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {
       usage(insight.progname);
