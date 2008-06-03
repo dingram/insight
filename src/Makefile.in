@@ -43,7 +43,8 @@ CONFIG_CLEAN_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
-am_insight_OBJECTS = insight.$(OBJEXT) path_helpers.$(OBJEXT) \
+am_insight_OBJECTS = insight.$(OBJEXT) query_engine.$(OBJEXT) \
+	string_helpers.$(OBJEXT) path_helpers.$(OBJEXT) \
 	bplus.$(OBJEXT)
 insight_OBJECTS = $(am_insight_OBJECTS)
 insight_LDADD = $(LDADD)
@@ -144,6 +145,10 @@ target_alias = @target_alias@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 insight_SOURCES = insight.c \
+                query_engine.c \
+                query_engine.h \
+                string_helpers.c \
+                string_helpers.h \
                 path_helpers.c \
                 path_helpers.h \
                 debug.h \
@@ -222,6 +227,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bplus.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/insight.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/path_helpers.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/query_engine.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/string_helpers.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

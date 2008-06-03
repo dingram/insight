@@ -35,89 +35,8 @@
 #endif
 */
 #include <debug.h>
+#include <string_helpers.h>
 #include <path_helpers.h>
-
-/**
- * Count the number of occurences of a character within a string.
- *
- * @param haystack The string to be searched.
- * @param needle   The character for which to count occurences.
- * @returns The number of times the character appears within the string.
- */
-int strcount(const char *haystack, const char needle) {
-  DEBUG("Function entry");
-  char *tmp = strdup(haystack);
-  int count=0;
-
-  DEBUG("Counting instances of \"%c\" in \"%s\".", needle, haystack);
-  while (tmp && *tmp) {
-    if (*(tmp++)==needle)
-      count++;
-  }
-  DEBUG("String has %d instances of %c", count, needle);
-  return count;
-}
-
-/**
- * Get the last component of a string, as split by \a sep.
- *
- * @param input The input string.
- * @param sep   The character to split by.
- * @returns The last component of the string, as split by \sep, or the entire
- * input string if \a sep is not found.
- */
-char *strlast(const char *input, const char sep) {
-  char *dup = strdup(input);
-  char *ret=rindex(dup, sep);
-  if (ret) ret++;
-  else ret=dup;
-  return ret;
-}
-
-/**
- * Split a string into multiple substrings based on one character.
- *
- * @param[in]  input The string to be split.
- * @param[in]  sep   The character which the string should be used to split \a input.
- * @param[out] count The number of items in the array.
- * @returns A pointer to the array, or NULL if an error occured. May be freed using free().
- */
-char **strsplit(const char *input, const char sep, int *count) {
-
-  DEBUG("Splitting \"%s\" by \"%c\"", input, sep);
-
-  *count=strcount(input, sep)+1;
-  char *tmp = strdup(input);
-  char **bits = calloc(*count, sizeof(char*));
-  int i;
-  if (!bits) {
-    DEBUG("Failed to allocate \"bits\" array.");
-    *count = 0;
-    return NULL;
-  }
-
-  char *sepstr=calloc(2, sizeof(char));
-  sepstr[0]=sep;
-
-  for (i=0; i<*count; i++) {
-    DEBUG("Dealing with bits[%d]", i);
-    char *tmptok = NULL;
-    tmptok = strtok(i?NULL:tmp, sepstr);
-    if (tmptok) {
-      bits[i] = strdup(tmptok);
-    } else {
-      bits[i] = calloc(1, sizeof(char));
-    }
-    DUMPSTR(bits[i]);
-  }
-  ifree(sepstr);
-
-  DEBUG("Freeing tmp");
-  ifree(tmp);
-
-  return bits;
-}
-
 
 /**
  * Create canonical path from the argument. A canonical path contains no
@@ -271,7 +190,7 @@ fileptr get_last_tag(const char *path) {
   DEBUG("Path to get last tag from: %s", path);
 
   /* if it's empty, then nothing to do. */
-  if (!path || !strlen(path)) {
+  if (!path || !*path) {
     DEBUG("Null path");
     return 0;
   }
@@ -289,13 +208,16 @@ fileptr get_last_tag(const char *path) {
  * @returns Non-zero if the path is valid, zero if the path is invalid.
  */
 int validate_path(const char *path) {
+  /* Empty and root paths are trivially valid */
+  if (!*path || strcmp(path, "/")==0) return 1;
+
   int count, i, isvalid=1;
   char **bits = strsplit(path, '/', &count);
 
   for (i=0; i<count && isvalid; i++) {
     DEBUG("Examining tag \"%s\"", bits[i]);
-    isvalid &= get_tag(bits[i])?1:0;
-    DEBUG(isvalid?"Valid":"Invalid!");
+    isvalid &= (!*bits[i] || get_tag(bits[i]))?1:0;
+    DEBUG("%s", isvalid?"Valid":"Invalid!");
   }
 
   DEBUG("Freeing bits");

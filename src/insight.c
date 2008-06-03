@@ -35,6 +35,8 @@
 #endif
 #include <debug.h>
 #include <path_helpers.h>
+#include <string_helpers.h>
+#include <query_engine.h>
 
 static int   insight_getattr(const char *path, struct stat *stbuf);
 static int   insight_readlink(const char *path, char *buf, size_t size);
@@ -181,7 +183,7 @@ static int insight_getattr(const char *path, struct stat *stbuf)
     }
     DEBUG("Found tag \"%s\"", canon_path+1);
     if (tree_read(tagdata, (tblock*)&dnode)) {
-      DEBUG("IO error reading data block");
+      PMSG(LOG_ERR, "IO error reading data block");
       return -EIO;
     }
     if (dnode.flags & DATA_FLAGS_SYNONYM) {
@@ -221,33 +223,30 @@ static int insight_readdir(const char *path, void *buf,
     return -ENOENT;
   }
 
-  DEBUG("Getting root");
+  char *last_tag=calloc(255, sizeof(char));
+
+  DEBUG("Generating query tree");
+  qelem *q = path_to_query(canon_path);
+
+  DEBUG("Finding subtag parent...");
+  (void)query_get_subtags(q, last_tag, 255);
+  DEBUG("Subtag parent: \"%s\"", last_tag);
+
+  DEBUG("Freeing query tree...");
+  qtree_free(&q, 1);
+  DEBUG("Query tree freed.");
+
   fileptr tree_root=tree_get_root();
-  int subtag=0;
-  DEBUG("Calling rindex()");
-  char *last_tag=rindex(canon_path, '/');
-
-  DEBUG("Checking last_tag");
-  if (!last_tag) last_tag=canon_path;
-  else           last_tag++;
-
-  DEBUG("Removing subkey indicators");
-  while (last_char_in(last_tag)==INSIGHT_SUBKEY_IND_C) {
-    DEBUG("Subtag");
-    last_char_in(last_tag)='\0';
-    subtag=1;
-  }
-
-  DEBUG("Last tag: \"%s\"", last_tag);
 
   DEBUG("Calling get_tag");
-  if (strcmp(last_tag, "")!=0 && (tree_root=get_tag(last_tag))==0) {
+  if (*last_tag && (tree_root=get_tag(last_tag))==0) {
     DEBUG("Tag \"%s\" not found", last_tag);
+    ifree(last_tag);
     return -ENOENT;
   }
   DEBUG("Found tag \"%s\"; tree root now %lu", last_tag, tree_root);
 
-  if (!subtag) {
+  if (!*last_tag) {
     tree_root=tree_get_root();
     DEBUG("Tree root reset to %lu", tree_root);
   }
@@ -257,33 +256,87 @@ static int insight_readdir(const char *path, void *buf,
   filler(buf, "..", NULL, 0);
 
   if (tree_sub_get_min(tree_root, &node)) {
-    DEBUG("tree_sub_get_min() failed\n");
+    PMSG(LOG_ERR, "tree_sub_get_min() failed\n");
+    ifree(last_tag);
     return -EIO;
   }
 
   if (node.magic != MAGIC_TREENODE) {
-    if (subtag)
+    if (*last_tag)
       DEBUG("No subtags");
     else
-      DEBUG("Something went very, very wrong\n");
+      PMSG(LOG_ERR, "Something went very, very wrong\n");
+    ifree(last_tag);
     return 0;
   }
 
-  if (strcmp(path, "/") != 0 && !subtag) {
-    /* add special directory containing subkeys of this key */
-    DEBUG("Adding subkey indicator directory");
-    filler(buf, INSIGHT_SUBKEY_IND, NULL, 0);
+  DEBUG("Should we add subtag dir?");
+  /* add special directory containing subkeys of this key */
+  if (strcmp(path, "/") != 0 && !*last_tag) {
+    DEBUG("Maybe - fetching last bit of path");
+    char *lastbit = strlast(canon_path, '/');
+    tnode n;
+    /* but only if it actually has subkeys */
+    DEBUG("Calling get_tag(\"%s\")", lastbit);
+    tree_root=get_tag(lastbit);
+
+    DEBUG("Getting minimum node");
+    if (tree_sub_get_min(tree_root, &n)) {
+      PMSG(LOG_ERR, "tree_sub_get_min() failed\n");
+      ifree(last_tag);
+      return -EIO;
+    }
+
+    if (n.magic==MAGIC_TREENODE) {
+      DEBUG("Adding subkey indicator directory");
+      filler(buf, INSIGHT_SUBKEY_IND, NULL, 0);
+    }
   }
+
+
+  int count, k, isunique=1;
+  char **bits = strsplit(canon_path, '/', &count);
+
   do {
     for (i=0; i<node.keycount; i++) {
-      DEBUG("Adding key \"%s\" to directory listing", node.keys[i]);
-      filler(buf, node.keys[i], NULL, 0);
+      if (*last_tag) {
+        char *incomplete_test=calloc(strlen(last_tag)+strlen(node.keys[i])+2, sizeof(char));
+        strcpy(incomplete_test, last_tag);
+        strcat(incomplete_test, INSIGHT_SUBKEY_SEP);
+        strcat(incomplete_test, node.keys[i]);
+        for (k=0, isunique=1; k<count && isunique; k++) {
+          isunique &= (strcmp(node.keys[i], bits[k])!=0)?1:0;
+          isunique &= (strcmp(incomplete_test, bits[k])!=0)?1:0;
+        }
+        ifree(incomplete_test);
+      } else {
+        for (k=0, isunique=1; k<count && isunique; k++) {
+          isunique &= (strcmp(node.keys[i], bits[k])!=0)?1:0;
+        }
+      }
+
+      if (isunique) {
+        DEBUG("Adding key \"%s\" to directory listing", node.keys[i]);
+        filler(buf, node.keys[i], NULL, 0);
+      } else {
+        DEBUG("Key \"%s\" is already in path", node.keys[i]);
+      }
     }
     if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
-      DEBUG("I/O error reading block\n");
+      PMSG(LOG_ERR, "I/O error reading block\n");
+      ifree(last_tag);
       return -EIO;
     }
   } while (node.ptrs[0]);
+
+  ifree(last_tag);
+
+  DEBUG("Freeing bits");
+  for (count--;count>=0; count--) {
+    ifree(bits[count]);
+  }
+  DEBUG("Freeing bits top-level");
+  ifree(bits);
 
   DEBUG("Returning\n");
 
@@ -326,7 +379,7 @@ static int insight_mkdir(const char *path, mode_t mode)
   }
 
   if (strcmp(newdir, INSIGHT_SUBKEY_IND)==0) {
-    DEBUG("Cannot create directories named \"%s\"\n", INSIGHT_SUBKEY_IND);
+    PMSG(LOG_WARN, "Cannot create directories named \"%s\"\n", INSIGHT_SUBKEY_IND);
     return -EPERM;
   }
 
@@ -359,7 +412,7 @@ static int insight_mkdir(const char *path, mode_t mode)
 
   initDataNode(&datan);
   if (!tree_sub_insert(tree_root, newdir, &datan)) {
-    DEBUG("Tree insertion failed\n");
+    PMSG(LOG_ERR, "Tree insertion failed\n");
     return -ENOSPC;
   }
   DEBUG("Successfully inserted \"%s\" into parent \"%s\"", newdir, parent_tag);
