@@ -642,6 +642,7 @@ static int tree_cache_put(fileptr block, tblock *data) {
  * @todo Is this really necessary?
  */
 static void tree_cache_del(fileptr block) {
+  (void) block;
   return;
 }
 #endif

@@ -9,10 +9,14 @@
 #define TREEKEY_SIZE 33
 /** Order of the tree - i.e. how many pointers are stored */
 #define ORDER ((TREEBLOCK_SIZE - 2*sizeof(short))/(sizeof(fileptr)+sizeof(tkey))+1)
+/** Order of the inode tree - i.e. how many pointers are stored */
+#define DORDER ((TREEBLOCK_SIZE - 2*sizeof(short))/(sizeof(fileptr)+sizeof(fileptr))+1)
 /** Maximum number of inodes in a data block */
 #define INODECOUNT 124
 /** Maximum number of inodes in an inode block */
 #define INODE_MAX ((TREEBLOCK_SIZE - sizeof(short) - 2*sizeof(unsigned long))/sizeof(fileptr))
+/** Maximum length of a path reference in an inode tree data block, including terminating null */
+#define IDATA_MAX_LEN (TREEBLOCK_SIZE - sizeof(unsigned long))
 
 /**
  * @defgroup MagicDefs Magic numbers
@@ -77,6 +81,17 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   char           unused[TREEBLOCK_SIZE - sizeof(unsigned long) - 2*sizeof(short) - ORDER*(sizeof(fileptr)) - (ORDER-1)*(sizeof(tkey))];
 } tnode;
 
+/** Node in the inode tree */
+typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
+  unsigned long  magic;            /**< Magic number 0xce11b10c */
+  unsigned short leaf;             /**< 0x01 if this node is a leaf node, 0x00 otherwise */
+  unsigned short keycount;         /**< The number of keys in this node */
+  fileptr        ptrs[DORDER];     /**< Addresses of child nodes if not leaf, or of data nodes and next sibling (index 0) if leaf */
+  fileptr        keys[DORDER-1];   /**< The keys stored in this node */
+                                   /** unused space */
+  char           unused[TREEBLOCK_SIZE - sizeof(unsigned long) - 2*sizeof(short) - ORDER*(sizeof(fileptr)) - (ORDER-1)*(sizeof(fileptr))];
+} tdnode;
+
 /** Data block in the tree */
 typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   unsigned long magic;        /**< Magic number 0xda7ab10c */
@@ -95,6 +110,12 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   fileptr inodes[INODE_MAX];  /**< List of inodes */
   fileptr next_inodes;        /**< Address of next block of inodes, or zero if none */
 } tinode;
+
+/** Data block in the inode tree */
+typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
+  unsigned long magic;        /**< Magic number */
+  char path[IDATA_MAX_LEN];   /**< Referenced path */
+} tddata;
 
 /** If a data node has this flag, it is a synonym for another node, and its \a
  * subkeys field is the address of the synonym target (another data block) */
@@ -121,11 +142,18 @@ fileptr tree_search       (tkey key);
 fileptr tree_sub_search   (fileptr root, tkey key);
 int     tree_remove       (tkey key);
 int     tree_sub_remove   (fileptr root, tkey key);
-fileptr tree_create       (fileptr addr);
 fileptr tree_insert       (tkey key, tdata *data);
 fileptr tree_sub_insert   (fileptr node, tkey key, tdata *data);
 int     tree_read_sb      (tsblock *super);
 int     tree_write_sb     (tsblock *super);
+
+fileptr treed_search      (fileptr key);
+fileptr treed_sub_search  (fileptr root, fileptr key);
+int     treed_remove      (fileptr key);
+int     treed_sub_remove  (fileptr root, fileptr key);
+fileptr treed_insert      (fileptr key, tddata *data);
+fileptr treed_sub_insert  (fileptr node, fileptr key, tddata *data);
+
 
 #endif /* #ifndef __BPLUS_H */
 

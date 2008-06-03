@@ -144,14 +144,14 @@ target_alias = @target_alias@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 insight_SOURCES = insight.c \
-                insight.h \
                 path_helpers.c \
                 path_helpers.h \
                 debug.h \
+								bplus_debug.h \
 								bplus.c \
                 bplus.h \
-								bplus_debug.h \
-								bplus_priv.h
+								bplus_priv.h \
+                insight.h
 
 all: all-am
 

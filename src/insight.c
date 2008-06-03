@@ -180,7 +180,7 @@ static int insight_getattr(const char *path, struct stat *stbuf)
       return -ENOENT;
     }
     DEBUG("Found tag \"%s\"", canon_path+1);
-    if (tree_read(tagdata, &dnode)) {
+    if (tree_read(tagdata, (tblock*)&dnode)) {
       DEBUG("IO error reading data block");
       return -EIO;
     }
@@ -377,6 +377,7 @@ static int insight_unlink(const char *path)
 
 static int insight_rmdir(const char *path)
 {
+  (void) path;
   return -EACCES;
 }
 

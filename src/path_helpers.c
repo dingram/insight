@@ -289,7 +289,6 @@ fileptr get_last_tag(const char *path) {
  * @returns Non-zero if the path is valid, zero if the path is invalid.
  */
 int validate_path(const char *path) {
-  // TODO: split path by '/' and then check each tag, splitting the tag as required.
   int count, i, isvalid=1;
   char **bits = strsplit(path, '/', &count);
 
