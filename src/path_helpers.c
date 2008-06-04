@@ -29,11 +29,9 @@
  */
 
 #include <insight.h>
-/*
 #ifndef _DEBUG
 #define _DEBUG
 #endif
-*/
 #include <debug.h>
 #include <string_helpers.h>
 #include <path_helpers.h>
@@ -228,4 +226,71 @@ int validate_path(const char *path) {
   ifree(bits);
   DEBUG("Returning %d", isvalid);
   return isvalid;
+}
+
+int checkdir(const char *path) {
+  struct stat dst;
+  return !((lstat(path, &dst) == -1) && (errno == ENOENT));
+}
+
+int check_mkdir(const char *path) {
+  struct stat dst;
+
+  if ((lstat(path, &dst) == -1) && (errno == ENOENT)) {
+    DEBUG("Creating directory %s", path);
+    if (mkdir(path, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {
+      FMSG(LOG_ERR, "Directory %s does not exist and can't be created!\n\n", path);
+      return 1;
+    }
+    return 0;
+  } else if (!S_ISDIR(dst.st_mode)) {
+    FMSG(LOG_ERR, "Default Insight directory %s exists but must be a directory!\n\n", path);
+    return 2;
+  }
+  return 0;
+}
+
+char *gen_repos_path(const char *hash, int create, const char *repos_base) {
+  char *finaldest;
+  int i;
+
+  finaldest = calloc(strlen(repos_base)+strlen("/01/23/45/01234567")+1, sizeof(char));
+  if (!finaldest) {
+    PMSG(LOG_ERR, "Failed to allocate memory");
+    return NULL;
+  }
+  strcpy(finaldest, repos_base);
+  /* finaldest guaranteed to exist so far */
+
+  for (i=0; i<6; i+=2) {
+    strcat(finaldest, "/");
+    strncat(finaldest, hash+i, 2);
+    DEBUG("Checking %s exists...", finaldest);
+    if (!create && !checkdir(finaldest)) {
+      ifree(finaldest);
+      return NULL;
+    } else if (create && check_mkdir(finaldest)) {
+      ifree(finaldest);
+      return NULL;
+    }
+  }
+
+  strcat(finaldest, "/");
+  strcat(finaldest, hash);
+
+  return finaldest;
+}
+
+int have_file_by_hash(const char *hash, struct stat *stat, const char *repos_base) {
+  char *filepath = gen_repos_path(hash, 0, repos_base);
+  if (!filepath) return 0;
+  return !((lstat(filepath, stat) == -1) && (errno == ENOENT));
+}
+
+int have_file_by_name(const char *path, struct stat *stat, const char *repos_base) {
+  char hash[9];
+  DEBUG("Input path: %s", path);
+  snprintf(hash, 9, "%08lX", hash_path(path, strlen(path)));
+  DEBUG("Path hash: %s", hash);
+  return have_file_by_hash(hash, stat, repos_base);
 }

@@ -166,3 +166,115 @@ char **strsplit(const char *input, const char sep, int *count) {
 }
 
 
+/* ************************************************************************ */
+/*   This code copied from reiserfs due to time constraints. Algorithm is   */
+/*   a keyed 32-bit hash function using TEA in a Davis-Meyer function, as   */
+/*   taken from Applied Cryptography, 2nd edition, p448. Implementation     */
+/*   by Jeremy Fitzhardinge <jeremy@zip.com.au> 1998                        */
+/* ************************************************************************ */
+
+#define DELTA 0x9E3779B9
+#define FULLROUNDS 10		/* 32 is overkill, 16 is strong crypto */
+#define PARTROUNDS 6		/* 6 gets complete mixing */
+
+/* a, b, c, d - data; h0, h1 - accumulated hash */
+#define TEACORE(rounds)							\
+	do {								\
+		unsigned long sum = 0;						\
+		int n = rounds;						\
+		unsigned long b0, b1;						\
+									\
+		b0 = h0;						\
+		b1 = h1;						\
+									\
+		do							\
+		{							\
+			sum += DELTA;					\
+			b0 += ((b1 << 4)+a) ^ (b1+sum) ^ ((b1 >> 5)+b);	\
+			b1 += ((b0 << 4)+c) ^ (b0+sum) ^ ((b0 >> 5)+d);	\
+		} while(--n);						\
+									\
+		h0 += b0;						\
+		h1 += b1;						\
+	} while(0)
+
+
+unsigned long hash_path(const char *path, int len) {
+
+	unsigned long k[] = { 0x9464a485, 0x542e1a94, 0x3e846bff, 0xb75bcfc3 };
+
+	unsigned long h0 = k[0], h1 = k[1];
+	unsigned long a, b, c, d;
+	unsigned long pad;
+	int i;
+
+  /* bit of molding */
+  char *p = strlast(path, '/') + 1;
+
+	pad = (unsigned long) len | ((unsigned long) len << 8);
+	pad |= pad << 16;
+
+	while (len >= 16) {
+		a = (unsigned long) p[0] |
+		    (unsigned long) p[1] << 8 | (unsigned long) p[2] << 16 | (unsigned long) p[3] << 24;
+		b = (unsigned long) p[4] |
+		    (unsigned long) p[5] << 8 | (unsigned long) p[6] << 16 | (unsigned long) p[7] << 24;
+		c = (unsigned long) p[8] |
+		    (unsigned long) p[9] << 8 |
+		    (unsigned long) p[10] << 16 | (unsigned long) p[11] << 24;
+		d = (unsigned long) p[12] |
+		    (unsigned long) p[13] << 8 |
+		    (unsigned long) p[14] << 16 | (unsigned long) p[15] << 24;
+
+		TEACORE(PARTROUNDS);
+
+		len -= 16;
+		p += 16;
+	}
+
+	if (len >= 12) {
+		a = (unsigned long) p[0] |
+		    (unsigned long) p[1] << 8 | (unsigned long) p[2] << 16 | (unsigned long) p[3] << 24;
+		b = (unsigned long) p[4] |
+		    (unsigned long) p[5] << 8 | (unsigned long) p[6] << 16 | (unsigned long) p[7] << 24;
+		c = (unsigned long) p[8] |
+		    (unsigned long) p[9] << 8 |
+		    (unsigned long) p[10] << 16 | (unsigned long) p[11] << 24;
+
+		d = pad;
+		for (i = 12; i < len; i++) {
+			d <<= 8;
+			d |= p[i];
+		}
+	} else if (len >= 8) {
+		a = (unsigned long) p[0] |
+		    (unsigned long) p[1] << 8 | (unsigned long) p[2] << 16 | (unsigned long) p[3] << 24;
+		b = (unsigned long) p[4] |
+		    (unsigned long) p[5] << 8 | (unsigned long) p[6] << 16 | (unsigned long) p[7] << 24;
+
+		c = d = pad;
+		for (i = 8; i < len; i++) {
+			c <<= 8;
+			c |= p[i];
+		}
+	} else if (len >= 4) {
+		a = (unsigned long) p[0] |
+		    (unsigned long) p[1] << 8 | (unsigned long) p[2] << 16 | (unsigned long) p[3] << 24;
+
+		b = c = d = pad;
+		for (i = 4; i < len; i++) {
+			b <<= 8;
+			b |= p[i];
+		}
+	} else {
+		a = b = c = d = pad;
+		for (i = 0; i < len; i++) {
+			a <<= 8;
+			a |= p[i];
+		}
+	}
+
+	TEACORE(FULLROUNDS);
+
+	return h0 ^ h1;
+}

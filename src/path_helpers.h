@@ -39,5 +39,10 @@ char *get_canonical_path(const char *path);
 fileptr get_tag(const char *tagname);
 fileptr get_last_tag(const char *tagname);
 int validate_path(const char *path);
+int checkdir(const char *path);
+int check_mkdir(const char *path);
+char *gen_repos_path(const char *hash, int create, const char *repos_base);
+int have_file_by_name(const char *path, struct stat *stat, const char *repos_base);
+int have_file_by_hash(const char *hash, struct stat *stat, const char *repos_base);
 
 #endif

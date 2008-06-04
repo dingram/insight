@@ -153,59 +153,67 @@ static int insight_getattr(const char *path, struct stat *stbuf)
     return -ENOENT;
   }
 
+  struct stat fstat;
+
   DEBUG("Getattr called on path \"%s\"", canon_path);
 
-  if (!validate_path(canon_path)) {
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
+    DEBUG("Got a file");
+
+    memcpy(stbuf, &fstat, sizeof(struct stat));
+    return 0;
+
+  } else if (validate_path(canon_path)) {
+    /* steal a default stat structure */
+    memcpy(stbuf, &insight.mountstat, sizeof(struct stat));
+
+    /* special case: root */
+    if (strcmp(canon_path, "/")==0) {
+      DEBUG("Getattr called on root path\n");
+      stbuf->st_mode = S_IFDIR | 0755;
+      stbuf->st_nlink = tree_key_count();
+      stbuf->st_ino = 1;
+      return 0;
+    }
+
+    if (strlen(canon_path)>2 && last_char_in(canon_path)==INSIGHT_SUBKEY_IND_C && canon_path[strlen(canon_path)-2]=='/') {
+      /* just a subkey indicator directory */
+      DEBUG("Getattr on a subkey indicator directory");
+      stbuf->st_mode = S_IFDIR | 0555;
+      stbuf->st_nlink = 1;
+      stbuf->st_ino = 2;
+    } else {
+      int subtag=0;
+      fileptr tagdata;
+      tdata dnode;
+
+      if (last_char_in(canon_path)==INSIGHT_SUBKEY_IND_C) {
+        last_char_in(canon_path)='\0';
+        subtag=1;
+      }
+
+      tagdata=get_last_tag(canon_path+1);
+
+      if (!tagdata) {
+        DEBUG("Tag \"%s\" not found\n", canon_path+1);
+        return -ENOENT;
+      }
+      DEBUG("Found tag \"%s\"", canon_path+1);
+      if (tree_read(tagdata, (tblock*)&dnode)) {
+        PMSG(LOG_ERR, "IO error reading data block");
+        return -EIO;
+      }
+      if (dnode.flags & DATA_FLAGS_SYNONYM) {
+        stbuf->st_mode = S_IFLNK | 0555;
+      } else {
+        stbuf->st_mode = S_IFDIR | 0555;
+      }
+      stbuf->st_nlink = 1;
+      stbuf->st_ino = -1;
+    }
+  } else {
     DEBUG("Path does not exist\n");
     return -ENOENT;
-  }
-
-  /* steal a default stat structure */
-  memcpy(stbuf, &insight.mountstat, sizeof(struct stat));
-
-  /* special case: root */
-  if (strcmp(canon_path, "/")==0) {
-    DEBUG("Getattr called on root path\n");
-    stbuf->st_mode = S_IFDIR | 0755;
-    stbuf->st_nlink = tree_key_count();
-    stbuf->st_ino = 1;
-    return 0;
-  }
-
-  if (strlen(canon_path)>2 && last_char_in(canon_path)==INSIGHT_SUBKEY_IND_C && canon_path[strlen(canon_path)-2]=='/') {
-    /* just a subkey indicator directory */
-    DEBUG("Getattr on a subkey indicator directory");
-    stbuf->st_mode = S_IFDIR | 0555;
-    stbuf->st_nlink = 1;
-    stbuf->st_ino = 2;
-  } else {
-    int subtag=0;
-    fileptr tagdata;
-    tdata dnode;
-
-    if (last_char_in(canon_path)==INSIGHT_SUBKEY_IND_C) {
-      last_char_in(canon_path)='\0';
-      subtag=1;
-    }
-
-    tagdata=get_last_tag(canon_path+1);
-
-    if (!tagdata) {
-      DEBUG("Tag \"%s\" not found\n", canon_path+1);
-      return -ENOENT;
-    }
-    DEBUG("Found tag \"%s\"", canon_path+1);
-    if (tree_read(tagdata, (tblock*)&dnode)) {
-      PMSG(LOG_ERR, "IO error reading data block");
-      return -EIO;
-    }
-    if (dnode.flags & DATA_FLAGS_SYNONYM) {
-      stbuf->st_mode = S_IFLNK | 0555;
-    } else {
-      stbuf->st_mode = S_IFDIR | 0555;
-    }
-    stbuf->st_nlink = 1;
-    stbuf->st_ino = -1;
   }
   DEBUG("Returning\n");
   return 0;
@@ -557,6 +565,7 @@ static int insight_readlink(const char *path, char *buf, size_t size)
     strncpy(buf, dnode.target, size);
   } else {
     /* not a symlink */
+    DEBUG("Requested tag \"%s\" is not a symlink.", canon_path+1);
     return -EINVAL;
   }
 
@@ -565,11 +574,42 @@ static int insight_readlink(const char *path, char *buf, size_t size)
 
 static int insight_symlink(const char *from, const char *to)
 {
-  (void) from;
-  (void) to;
+  unsigned long hash;
+  char s_hash[9];
+  char *finaldest;
 
   DEBUG("Create symlink from \"%s\" to \"%s\"", from, to);
-  return -ENOTSUP;
+  if (!from) {
+    FMSG(LOG_ERR, "Asked to import file with null target");
+    return -EINVAL;
+  }
+  if (*from!='/') {
+    FMSG(LOG_ERR, "Can only import files with absolute paths");
+    return -EPERM;
+  }
+
+  /* calculate an inode number for the path */
+  DEBUG("Hashing \"%s\"...", to+1);
+  hash = hash_path(to+1, strlen(to+1));
+  sprintf(s_hash, "%08lX", hash);
+  DEBUG("Repos target therefore: %s -> %s", s_hash, from);
+
+  finaldest = gen_repos_path(s_hash, 1, insight.repository);
+  if (!finaldest) {
+    PMSG(LOG_ERR, "Failed to generate repository path");
+    return -EIO;
+  }
+
+  DEBUG("Final symlink call: symlink(\"%s\", \"%s\")", from, finaldest);
+
+  if (symlink(from, finaldest)==-1) {
+    PMSG(LOG_ERR, "Symlink creation failed: %s", strerror(errno));
+    ifree(finaldest);
+    return -EIO;
+  }
+
+  ifree(finaldest);
+  return 0;
 }
 
 static int insight_link(const char *from, const char *to)
@@ -586,7 +626,7 @@ static int insight_chmod(const char *path, mode_t mode)
   (void) path;
   (void) mode;
 
-  DEBUG("Change mode of \"%s\" to %05o", path, mode);
+  DEBUG("Change mode of \"%s\" to %05o", path, mode & 07777);
   return -ENOTSUP;
 }
 
@@ -861,12 +901,15 @@ static int insight_open_store() {
       strcat(insightdir, "/.insightfs");
 
       if ((lstat(insightdir, &dst) == -1) && (errno == ENOENT)) {
-        FMSG(LOG_INFO, "Creating default store directory %s", insightdir);
+        FMSG(LOG_INFO, "Creating default Insight directory %s", insightdir);
         if (mkdir(insightdir, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {
           if (!insight.quiet)
-            FMSG(LOG_ERR, "Tree directory %s does not exist and can't be created!\n\n", insightdir);
+            FMSG(LOG_ERR, "Default Insight directory %s does not exist and can't be created!\n\n", insightdir);
           return 2;
         }
+      } else if (!S_ISDIR(dst.st_mode)) {
+        FMSG(LOG_ERR, "Default Insight directory %s exists but must be a directory!\n\n", insightdir);
+        return 2;
       }
     } else {
       usage(insight.progname);
@@ -915,6 +958,97 @@ static int insight_open_store() {
   /* open the store */
   if (tree_open(insight.treestore)) {
     PMSG(LOG_ERR, "Failed to initialise tree!");
+    return 2;
+  }
+
+  return 0;
+}
+
+static int insight_check_repos() {
+  /* check repository path we've been given */
+  if (!insight.repository || (strcmp(insight.repository, "") == 0)) {
+    if (strlen(getenv("HOME"))) {
+      struct stat dst;
+      int storelen = strlen(getenv("HOME")) + strlen("/.insightfs/repos") + 1; /* +1 for null */
+      char *insightdir = calloc(strlen(getenv("HOME")) + strlen("/.insightfs") + 1, 1);
+
+      if (insight.repository) ifree(insight.repository);
+      insight.repository = calloc(storelen, sizeof(char));
+      strcat(insight.repository, getenv("HOME"));
+      strcat(insight.repository, "/.insightfs/repos");
+      if (!insight.quiet)
+        FMSG(LOG_INFO, "Using default link repository %s", insight.repository);
+
+      /* check the .insightfs directory exists and create if need be */
+      strcat(insightdir, getenv("HOME"));
+      strcat(insightdir, "/.insightfs");
+
+      if ((lstat(insightdir, &dst) == -1) && (errno == ENOENT)) {
+        FMSG(LOG_INFO, "Creating default Insight directory %s", insightdir);
+        if (mkdir(insightdir, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {
+          if (!insight.quiet)
+            FMSG(LOG_ERR, "Default Insight directory %s does not exist and can't be created!\n\n", insightdir);
+          return 2;
+        }
+      } else if (!S_ISDIR(dst.st_mode)) {
+        FMSG(LOG_ERR, "Default Insight directory %s exists but must be a directory!\n\n", insightdir);
+        return 2;
+      }
+    } else {
+      usage(insight.progname);
+      if (!insight.quiet)
+        MSG(LOG_ERR, "%s: No link repository directory given\n", insight.progname);
+      return 2;
+    }
+  }
+
+	/* Do we need to substitute homedir for ~? */
+	if (insight.repository[0] == '~') {
+		char *home_path = getenv("HOME");
+		if (home_path != NULL) {
+			char *relative_path = strdup(insight.repository + 1);
+			ifree(insight.repository);
+			insight.repository = calloc(sizeof(char), strlen(relative_path) + strlen(home_path) + 1);
+			strcpy(insight.repository, home_path);
+			strcat(insight.repository, relative_path);
+			ifree(relative_path);
+			FMSG(LOG_INFO, "Link repository path is %s", insight.repository);
+		} else {
+			FMSG(LOG_ERR, "Link repository path starts with '~', but $HOME could not be read.");
+		}
+  } else if (insight.repository[0] != '/') {
+    /* Is this a relative path? */
+    FMSG(LOG_INFO, "Link repository path %s is relative", insight.repository);
+    char *cwd = getcwd(NULL, 0);
+    if (cwd == NULL) {
+      FMSG(LOG_ERR, "Error getting current directory, will leave link repository path alone");
+    } else {
+      char *abs_store = calloc(sizeof(char), strlen(insight.repository) + strlen(cwd) + 2);
+      if (abs_store == NULL) {
+        PMSG(LOG_ERR, "Failed to allocate memory for absolute path");
+        FMSG(LOG_ERR, "Link repository path will remain relative!");
+      } else {
+        strcpy(abs_store, cwd);
+        strcat(abs_store, "/");
+        strcat(abs_store, insight.repository);
+        ifree(insight.repository);
+        insight.repository = abs_store;
+        FMSG(LOG_INFO, "Absolute link repository path is %s", insight.repository);
+      }
+    }
+  }
+
+  struct stat dst;
+  /* create repository if it doesn't exist */
+  if ((lstat(insight.repository, &dst) == -1) && (errno == ENOENT)) {
+    FMSG(LOG_INFO, "Creating link repository %s", insight.repository);
+    if (mkdir(insight.repository, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {
+      if (!insight.quiet)
+        FMSG(LOG_ERR, "Link repository directory %s does not exist and can't be created!\n\n", insight.repository);
+      return 2;
+    }
+  } else if (!S_ISDIR(dst.st_mode)) {
+    FMSG(LOG_ERR, "Link repository directory %s exists but must be a directory!\n\n", insight.repository);
     return 2;
   }
 
@@ -973,14 +1107,19 @@ int main(int argc, char *argv[]) {
   if (!insight.quiet) {
     fprintf(stderr, "\n");
     fprintf(stderr,
-      " Insight semantic file system v.%s FUSE_USE_VERSION: %d\n"
+      " Insight semantic file system v.%s\n"
       " (c) 2008 David Ingram <insight@dmi.me.uk>\n"
       " For license informations, see %s -h\n\n"
-      , PACKAGE_VERSION, FUSE_USE_VERSION, insight.progname
+      , PACKAGE_VERSION, insight.progname
     );
   }
 
   if (insight_open_store()) {
+    /* Fatal error! Details printed by the function */
+    exit(2);
+  }
+
+  if (insight_check_repos()) {
     /* Fatal error! Details printed by the function */
     exit(2);
   }
@@ -999,6 +1138,9 @@ int main(int argc, char *argv[]) {
 #endif
 
   fuse_opt_free_args(&args);
+
+  ifree(insight.treestore);
+  ifree(insight.repository);
 
   return res;
 }

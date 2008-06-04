@@ -1502,3 +1502,15 @@ int tree_write_sb (tsblock *super) {
   return tree_write(0, (tblock*)super);
 }
 
+/**
+ * Fetch all inodes from the given block, following links as required. The \a
+ * block argument may refer to either a data block or the superblock (if zero).
+ *
+ * @param[in]  block  The first block index to read.
+ * @param[out] inodes A pointer which will be filled with an array of inodes.
+ * @param[in]  max    Maximum number of inodes the array can contain.
+ * @returns Zero on success, or an error code on failure.
+ */
+int inode_fetch_all(fileptr block, fileptr *inodes, int max) {
+  tdata datablock;
+}
