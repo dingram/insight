@@ -1,3 +1,5 @@
+#ifndef __QUERY_ENGINE_H
+#define __QUERY_ENGINE_H
 /*
  * Copyright (C) 2008 David Ingram
  *
@@ -27,9 +29,6 @@
  *
  * Your fair use and other rights are in no way affected by the above.
  */
-
-#ifndef __QUERY_ENGINE_H
-#define __QUERY_ENGINE_H
 
 /**
  * The type of a query tree element.

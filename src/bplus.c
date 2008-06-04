@@ -8,9 +8,11 @@
 #include <errno.h>
 #include <assert.h>
 
+/*
 #ifndef _DEBUG
 #define _DEBUG
 #endif
+*/
 #include "bplus.h"
 #include "bplus_debug.h"
 #include "bplus_priv.h"
@@ -289,9 +291,9 @@ int tree_close (void) {
 #ifdef TREE_STATS_ENABLED
     /* dump statistics */
     if (tree_stats) {
-      unsigned int total_reads=0, total_writes=0;
+      unsigned long long total_reads=0, total_writes=0;
 #ifdef TREE_CACHE_ENABLED
-      unsigned int total_cache_reads=0, total_cache_writes=0;
+      unsigned long long total_cache_reads=0, total_cache_writes=0;
 #endif
 
       DEBUG("Dumping statistics");
@@ -314,10 +316,10 @@ int tree_close (void) {
       }
 #ifdef TREE_CACHE_ENABLED
       DEBUG("-----------------------------------------------------------------------------");
-      DEBUG("Stats TOTAL: %5u reads; %5u writes; %5u cache reads; %5u cache writes", total_reads, total_writes, total_cache_reads, total_cache_writes);
+      FMSG(LOG_INFO, "Stats TOTAL: %5llu reads; %5llu writes; %5llu cache reads; %5llu cache writes", total_reads, total_writes, total_cache_reads, total_cache_writes);
 #else
       DEBUG("--------------------------------------");
-      DEBUG("Stats TOTAL: %5u reads; %5u writes", total_reads, total_writes);
+      FMSG(LOG_INFO, "Stats TOTAL: %5llu reads; %5llu writes", total_reads, total_writes);
 #endif
       free(tree_stats);
     }
@@ -792,8 +794,11 @@ int tree_sub_get(fileptr root, char *key, tdata *node) {
   return 0;
 }
 
-/*
- * search for given key and return data block index
+/**
+ * Search for given key and return data block index associated with it.
+ *
+ * @param key The key to used for the search.
+ * @returns See tree_sub_search()
  */
 fileptr tree_search(char *key) {
   return tree_sub_search(tree_sb->root_index, key);
@@ -1497,84 +1502,3 @@ int tree_write_sb (tsblock *super) {
   return tree_write(0, (tblock*)super);
 }
 
-
-/****************************************************************************/
-
-
-#if 0
-
-
-/*****************************************************************************
- *  tree_destroy_data
- * --------------------------------------------------------------------------
- *    bplusdata ** node - a pointer to the data node to destroy
- * --------------------------------------------------------------------------
- *  Destroys a data node, including its subkeys tree if applicable, and
- *  freeing its inode linked list. Returns FALSE if the node has not been
- *  completely destroyed for any reason.
- ****************************************************************************/
-int tree_destroy_data(bplusdata** node) {
-  bplusdata *n = *node;
-
-  if (!n) return TRUE;
-
-  printf("Destroying data node %p with inode count %d\n", n, n->inodecount);
-  tree_dump_data(n, 0);
-
-  if (n->inodecount > INODECOUNT) {
-#ifdef _DEBUG
-    fprintf(stderr, COL_YELLOW "Asked to destroy a node with external inodes...\n" COL_RESET);
-#endif
-    return FALSE;
-  }
-
-  if (n->subkeys) {
-#ifdef _DEBUG
-    fprintf(stderr, COL_YELLOW "Asked to destroy a node with subkeys...\n" COL_RESET);
-#endif
-    return FALSE;
-  }
-
-  /* Actually free it */
-  free(n);
-  *node = NULL;
-  return TRUE;
-}
-
-
-/*****************************************************************************
- *  tree_destroy_node
- * --------------------------------------------------------------------------
- *    bplusnode ** tree - a pointer to the root node of the tree
- * --------------------------------------------------------------------------
- *  Recurses through the tree, destroying and freeing all child data and tree
- *  nodes. Returns FALSE if the tree has not been completely destroyed.
- ****************************************************************************/
-int tree_destroy_node(bplusnode** tree) {
-  bplusnode *t = *tree;
-  int i;
-
-  if (!t) return TRUE;
-
-  printf("Destroying node with %d keys...\n", t->keycount);
-
-  if (t->keycount) {
-    for (i=0; i<t->keycount+1; i++) {
-      if (i<t->keycount) printf("Key: %s\n", t->keys[i]);
-      if (t->ptrs[i].n) {
-        if (t->leaf) {
-          if (!tree_destroy_data(&t->ptrs[i].d)) return FALSE;
-        } else {
-          if (!tree_destroy_node(&t->ptrs[i].n)) return FALSE;
-        }
-      }
-    }
-  }
-
-  /* Actually free it */
-  free(t);
-  *tree = NULL;
-  return TRUE;
-}
-
-#endif

@@ -141,7 +141,7 @@ static struct fuse_operations insight_oper = {
   .init       = insight_init,
 };
 
-static int usage_already_printed = 0;
+static int usage_printed = 0;
 
 
 
@@ -747,7 +747,7 @@ static void *insight_init(void)
  */
 void usage(char *progname)
 {
-  if (usage_already_printed++)
+  if (usage_printed++)
     return;
 
   fprintf(stderr, "\n"
@@ -755,20 +755,12 @@ void usage(char *progname)
     " Semantic file system for Linux\n"
     " (c) 2008 Dave Ingram <insight@dmi.me.uk>\n"
     " \n"
-/*  " This program is free software; you can redistribute it and/or modify\n"
-    " it under the terms of the GNU General Public License as published by\n"
-    " the Free Software Foundation; either version 2 of the License, or\n"
-    " (at your option) any later version.\n\n"
-
-    " This program is distributed in the hope that it will be useful,\n"
-    " but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
-    " MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
-    " GNU General Public License for more details.\n\n"
-
-    " You should have received a copy of the GNU General Public License\n"
-    " along with this program; if not, write to the Free Software\n"
-    " Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA\n"
-    " \n" */
+    " This program is released under a Creative Commons\n"
+    " Attribution-NonCommerical-ShareAlike2.5 License.\n"
+    "\n"
+    " For more information, please see\n"
+    "   http://creativecommons.org/licenses/by-nc-sa/2.5/\n"
+    " \n"
     " Usage: %s [OPTIONS] --store=PATH --repos=PATH /mountpoint\n"
     "\n"
     "    -q              Less logging (has priority over -v)\n"

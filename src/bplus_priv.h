@@ -29,11 +29,11 @@
 
 #ifdef TREE_STATS_ENABLED
 typedef struct {
-  unsigned int reads;
-  unsigned int writes;
+  unsigned long long reads;
+  unsigned long long writes;
 #ifdef TREE_CACHE_ENABLED
-  unsigned int cache_reads;
-  unsigned int cache_writes;
+  unsigned long long cache_reads;
+  unsigned long long cache_writes;
 #endif
 } stats_ent;
 

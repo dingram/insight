@@ -67,7 +67,8 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   fileptr root_index;       /**< Address of root of top-level tree */
   fileptr max_size;         /**< Max size of tree file, in blocks (not including superblock) */
   fileptr free_head;        /**< Address of first free block (0 if none) */
-  char unused[TREEBLOCK_SIZE - (sizeof(unsigned long) + sizeof(unsigned short) + 3*sizeof(fileptr))]; /**< Unused space */
+  fileptr inode_limbo;      /**< Address of first block of the inode limbo area */
+  char unused[TREEBLOCK_SIZE - (sizeof(unsigned long) + sizeof(unsigned short) + 4*sizeof(fileptr))]; /**< Unused space */
 } tsblock;
 
 /** Node in the tree */
