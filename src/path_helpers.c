@@ -29,9 +29,11 @@
  */
 
 #include <insight.h>
+/*
 #ifndef _DEBUG
 #define _DEBUG
 #endif
+*/
 #include <debug.h>
 #include <string_helpers.h>
 #include <path_helpers.h>

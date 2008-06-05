@@ -62,13 +62,15 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
 
 /** The superblock */
 typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
-  unsigned long magic;      /**< Magic number 0x00bab10c */
-  unsigned short version;   /**< Version code for the file. First byte (little-endian) is major number, second is minor. */
-  fileptr root_index;       /**< Address of root of top-level tree */
-  fileptr max_size;         /**< Max size of tree file, in blocks (not including superblock) */
-  fileptr free_head;        /**< Address of first free block (0 if none) */
-  fileptr inode_limbo;      /**< Address of first block of the inode limbo area */
-  char unused[TREEBLOCK_SIZE - (sizeof(unsigned long) + sizeof(unsigned short) + 4*sizeof(fileptr))]; /**< Unused space */
+  unsigned long magic;        /**< Magic number 0x00bab10c */
+  unsigned short version;     /**< Version code for the file. First byte (little-endian) is major number, second is minor. */
+  unsigned short reserved;    /**< Reserved for future expansion. Makes for better alignment. */
+  fileptr root_index;         /**< Address of root of top-level tree */
+  fileptr max_size;           /**< Max size of tree file, in blocks (not including superblock) */
+  fileptr free_head;          /**< Address of first free block (0 if none) */
+  fileptr inode_limbo;        /**< Address of first block of the inode limbo area */
+  unsigned long limbo_count;  /**< Number of inodes total in limbo */
+  char padding[TREEBLOCK_SIZE - (2*sizeof(unsigned long) + 2*sizeof(unsigned short) + 4*sizeof(fileptr))]; /**< Unused space */
 } tsblock;
 
 /** Node in the tree */
@@ -96,7 +98,7 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
 /** Data block in the tree */
 typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   unsigned long magic;        /**< Magic number 0xda7ab10c */
-  short inodecount;           /**< Number of inodes related to this key (not necessarily all stored in this node) */
+  unsigned short inodecount;  /**< Number of inodes related to this key (not necessarily all stored in this node) */
   short flags;                /**< Flags and other information about this node */
   fileptr subkeys;            /**< Root node of subkeys tree or address of synonym target if \a flags contain \c DATA_FLAGS_SYNONYM */
   union {

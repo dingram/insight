@@ -33,7 +33,10 @@ static int tree_format () {
 
   if (tree_sb) free(tree_sb);
   tree_sb=malloc(sizeof(tsblock));
-  if (!tree_sb) return ENOMEM;
+  if (!tree_sb) {
+    PMSG(LOG_ERR, "Failed to allocate memory for superblock");
+    return ENOMEM;
+  }
 
   DEBUG("Initialising structures");
   zero_block(tree_sb);
@@ -52,7 +55,7 @@ static int tree_format () {
 
   DEBUG("Writing root block");
   if ((result=tree_write(1, (tblock*)&root))) {
-    DEBUG("Problem writing root: %s", strerror(errno));
+    PMSG(LOG_ERR, "Problem writing root: %s", strerror(errno));
     return errno;
   }
 
@@ -81,28 +84,28 @@ static int tree_format_free (fileptr start, fileptr size) {
   DEBUG("Seeking to start");
   /* NOTE: not using tree_write() here because that would be seek overkill */
   if (lseek(tree_fp, start * TREEBLOCK_SIZE, SEEK_SET)<0) {
-    DEBUG("Seek failed: %s", strerror(errno));
+    PMSG(LOG_ERR, "Seek failed: %s", strerror(errno));
     return EIO;
   }
   DEBUG("Writing free blocks");
   for (i=0; i < size - 1; i++) {
     f.next = i + start + 1;
     if (write(tree_fp, &f, TREEBLOCK_SIZE)<0) {
-      DEBUG("Write failed: %s", strerror(errno));
+      PMSG(LOG_ERR, "Write failed: %s", strerror(errno));
       return EIO;
     }
   }
   DEBUG("Writing last free block");
   f.next = tree_sb->free_head;
   if (write(tree_fp, &f, TREEBLOCK_SIZE)<0) {
-    DEBUG("Final write failed: %s", strerror(errno));
+    PMSG(LOG_ERR, "Final write failed: %s", strerror(errno));
     return EIO;
   }
 
   DEBUG("Updating and writing superblock");
   tree_sb->free_head = start;
   if ((result=tree_write_sb(tree_sb))) {
-    DEBUG("Problem writing superblock: %s", strerror(errno));
+    PMSG(LOG_ERR, "Problem writing superblock: %s", strerror(errno));
     if (result!=EIO) errno=result;
     return errno;
   }
@@ -129,25 +132,25 @@ static fileptr tree_alloc (void) {
   DEBUG("Allocating a block");
   errno=0;
   if (!tree_sb->free_head) {
-    DEBUG("But we don't have any free");
+    PMSG(LOG_ERR, "But we don't have any free");
     errno=ENOMEM;
     return 0;
   }
   h = tree_sb->free_head;
   DEBUG("Free block %lu obtained", h);
   if (tree_read(h, (tblock *)&t)) {
-    DEBUG("Problem reading free block");
+    PMSG(LOG_ERR, "Problem reading free block");
     return 0;
   }
   if (t.magic != MAGIC_FREEBLOCK) {
-    DEBUG("Invalid magic number (%lX)", t.magic);
+    PMSG(LOG_ERR, "Invalid magic number (%lX)", t.magic);
     errno=EBADF;
     return 0;
   }
   DEBUG("Updating next free block to %lu", t.next);
   tree_sb->free_head = t.next;
   if ((result=tree_write_sb(tree_sb))) {
-    DEBUG("Problem writing superblock: %s", strerror(errno));
+    PMSG(LOG_ERR, "Problem writing superblock: %s", strerror(errno));
     if (result!=EIO) errno=result;
     return 0;
   }
@@ -170,7 +173,7 @@ static int tree_free (fileptr block) {
 
   errno=0;
   if (!block) {
-    DEBUG("Tried to free zero block!");
+    PMSG(LOG_ERR, "Tried to free zero block!");
     return EINVAL;
   }
   DEBUG("Freeing block %lu", block);
@@ -178,12 +181,12 @@ static int tree_free (fileptr block) {
   DEBUG("  Adding block to free list (previous head %lu)", tree_sb->free_head);
   t.next = tree_sb->free_head;
   if ((result=tree_write(block, (tblock*)&t))) {
-    DEBUG("Problem writing block: %s", strerror(errno));
+    PMSG(LOG_ERR, "Problem writing block: %s", strerror(errno));
     return errno;
   }
   tree_sb->free_head = block;
   if ((result=tree_write_sb(tree_sb))) {
-    DEBUG("Problem writing superblock: %s", strerror(errno));
+    PMSG(LOG_ERR, "Problem writing superblock: %s", strerror(errno));
     if (result!=EIO) errno=result;
     return errno;
   }
@@ -207,7 +210,7 @@ int tree_open (char *path) {
   int result;
 
   if (tree_fp >= 0) {
-    DEBUG("Already open");
+    FMSG(LOG_ERR, "Tree already open");
     return EMFILE; /* Too many open files */
 
   } else if ( (tree_fp = open(path, O_RDWR)) >= 0) {
@@ -218,14 +221,14 @@ int tree_open (char *path) {
     DEBUG("Reading superblock");
     /* read the superblock from the index */
     if ( (result=tree_read_sb(superb)) ) {
-      DEBUG("Superblock error");
+      PMSG(LOG_ERR, "Superblock error");
       tree_close();
       return result; /* I/O error */
     } else {
       DEBUG("Superblock OK");
       if (tree_sb) free(tree_sb);
       tree_sb = superb;
-      DEBUG("Superblock version %d.%d", (tree_sb->version>>8), (tree_sb->version & 0xff));
+      FMSG(LOG_INFO, "Superblock version %d.%d", (tree_sb->version>>8), (tree_sb->version & 0xff));
 #ifdef TREE_STATS_ENABLED
       tree_stats = malloc((tree_sb->max_size+1) * sizeof(stats_ent)); /* TODO: check for failure */
       zero_mem(tree_stats, (tree_sb->max_size+1) * sizeof(stats_ent));
@@ -280,7 +283,7 @@ int tree_close (void) {
   if (tree_fp >= 0) {
 #ifdef TREE_CACHE_ENABLED
     if ((errno=tree_cache_drop())) {
-      DEBUG("Failed to drop cache: %s", strerror(errno));
+      PMSG(LOG_ERR, "Failed to drop cache: %s", strerror(errno));
       return EFAULT;
     }
 #endif
@@ -343,7 +346,7 @@ int tree_close (void) {
  */
 int tree_grow (fileptr newsize) {
   if (newsize < tree_sb->max_size) {
-    DEBUG("Tried to shrink metadata store from %lu blocks to %lu.", tree_sb->max_size, newsize);
+    PMSG(LOG_WARN, "Tried to shrink metadata store from %lu blocks to %lu.", tree_sb->max_size, newsize);
     return EINVAL;
   }
   if (newsize == tree_sb->max_size) {
@@ -370,7 +373,7 @@ int tree_read (fileptr block, tblock *data) {
   tblock *cache;
 #endif
   if (!data) {
-    DEBUG("Data is a null pointer!");
+    PMSG(LOG_ERR, "Data is a null pointer!");
     return EINVAL;
   }
 #ifdef TREE_CACHE_ENABLED
@@ -383,19 +386,19 @@ int tree_read (fileptr block, tblock *data) {
 #endif
   /* Read from disk */
   if (lseek(tree_fp, block * TREEBLOCK_SIZE, SEEK_SET)<0) {
-    DEBUG("Seek failed: %s", strerror(errno));
+    PMSG(LOG_ERR, "Seek failed: %s", strerror(errno));
     return EIO;
   }
   if (read(tree_fp, data, TREEBLOCK_SIZE)<0) {
-    DEBUG("Read failed: %s", strerror(errno));
+    PMSG(LOG_ERR, "Read failed: %s", strerror(errno));
     return EIO;
   }
   DEBUG("Read block %lu", block);
   DUMPBLOCK((tblock*)data);
 #ifdef TREE_CACHE_ENABLED
   /* Save to cache */
-  if ((errno=tree_cache_put(block, (tblock*)data))) {
-    DEBUG("Failed to write to cache: %s", strerror(errno));
+  if (block_cache && (errno=tree_cache_put(block, (tblock*)data))) {
+    PMSG(LOG_ERR, "Failed to write to cache: %s", strerror(errno));
     return ENOMEM;
   }
 #endif
@@ -420,15 +423,15 @@ int tree_read (fileptr block, tblock *data) {
  */
 static int _tree_write (fileptr block, tblock *data) {
   if (block==0 && data->magic!=MAGIC_SUPERBLOCK) {
-    DEBUG("Tried to superblock but it doesn't look like one! Has magic %lX instead.", data->magic);
+    PMSG(LOG_ERR, "Tried to superblock but it doesn't look like one! Has magic %lX instead.", data->magic);
     return EBADF;
   }
   if (lseek(tree_fp, block * TREEBLOCK_SIZE, SEEK_SET)<0) {
-    DEBUG("Seek failed: %s", strerror(errno));
+    PMSG(LOG_ERR, "Seek failed for block %lu: %s", block, strerror(errno));
     return EIO;
   }
   if (write(tree_fp, data, TREEBLOCK_SIZE)<0) {
-    DEBUG("Write failed: %s", strerror(errno));
+    PMSG(LOG_ERR, "Write failed for block %lu: %s", block, strerror(errno));
     return EIO;
   }
   DEBUG("Wrote block %lu", block);
@@ -452,11 +455,17 @@ static int _tree_write (fileptr block, tblock *data) {
  * available in \c errno.
  */
 int tree_write (fileptr block, tblock *data) {
-  if (!data) return EINVAL;
+  if (!data) {
+    PMSG(LOG_ERR, "Cannot write null data");
+    return EINVAL;
+  }
 #ifdef TREE_CACHE_ENABLED
-  if ((errno=tree_cache_put(block, (tblock*)data))) {
-    DEBUG("Failed to write to cache: %s", strerror(errno));
+  if (block_cache && (errno=tree_cache_put(block, (tblock*)data))) {
+    PMSG(LOG_ERR, "Failed to write to cache: %s", strerror(errno));
     return ENOMEM;
+  } else if (!block_cache) {
+    /* must write if no cache available! */
+    return _tree_write(block, data);
   }
   return 0;
 #else
@@ -474,12 +483,12 @@ int tree_write (fileptr block, tblock *data) {
  */
 static int tree_cache_init() {
   if (block_cache) {
-    DEBUG("Cache already allocated");
+    PMSG(LOG_ERR, "Cache already allocated");
     return EEXIST;
   }
   block_cache = malloc(CACHE_COUNT * sizeof(cache_ent));
   if (!block_cache) {
-    DEBUG("Failed to allocate cache");
+    PMSG(LOG_ERR, "Failed to allocate cache");
     return ENOMEM;
   }
   DEBUG("Cache allocated: %u bytes containing %d entries", (CACHE_COUNT*sizeof(cache_ent)), CACHE_COUNT);
@@ -498,14 +507,14 @@ static int tree_cache_init() {
 static int tree_cache_flush(int clear) {
   unsigned int i;
   if (!block_cache) {
-    DEBUG("Cache not allocated; cannot flush");
+    PMSG(LOG_ERR, "Cache not allocated; cannot flush");
     return ENOENT;
   }
   DEBUG("Flushing cache to disk...");
   if (tree_sb) {
     DEBUG("Flushing superblock to disk...");
     if (_tree_write(0, (tblock*)tree_sb)) {
-      DEBUG("I/O error writing superblock");
+      PMSG(LOG_ERR, "I/O error writing superblock");
       return EIO;
     }
   }
@@ -514,7 +523,7 @@ static int tree_cache_flush(int clear) {
     if (block_cache[i].addr && block_cache[i].writecount) {
       DEBUG("Flushing cache entry %d to block %lu", i, block_cache[i].addr);
       if (_tree_write(block_cache[i].addr, &block_cache[i].data)) {
-        DEBUG("I/O error");
+        PMSG(LOG_ERR, "I/O error");
         return EIO;
       }
       if (clear) zero_mem(&block_cache[i], sizeof(cache_ent));
@@ -534,11 +543,11 @@ static int tree_cache_flush(int clear) {
  */
 static int tree_cache_drop() {
   if (!block_cache) {
-    DEBUG("Cache not allocated; cannot free");
+    PMSG(LOG_ERR, "Cache not allocated; cannot free");
     return ENOENT;
   }
   if (tree_cache_flush(0)) {
-    DEBUG("Failed to flush cache to disk - aborting");
+    PMSG(LOG_ERR, "Failed to flush cache to disk - aborting");
     return EIO;
   }
   free(block_cache);
@@ -593,7 +602,7 @@ static int tree_cache_put(fileptr block, tblock *data) {
 #endif
     return 0;
   } else if (!tree_sb) {
-    DEBUG("Cannot cache superblock as it hasn't been allocated yet.");
+    PMSG(LOG_WARN, "Cannot cache superblock as it hasn't been allocated yet.");
     return 0;
   } else if (!block) {
     DEBUG("Trying to put superblock into cache; doing nothing");
@@ -603,8 +612,8 @@ static int tree_cache_put(fileptr block, tblock *data) {
     return 0;
   }
   if (!block_cache) {
-    DEBUG("Cache not initialised");
-    return EACCES;
+    PMSG(LOG_ERR, "Cache not initialised");
+    return ENOBUFS;
   }
   /* if cache collision, overwrite */
   entry = &block_cache[tree_get_cache_loc(block)];
@@ -635,7 +644,7 @@ static int tree_cache_put(fileptr block, tblock *data) {
 #endif
     return 0;
   } else {
-    DEBUG("Should never get here.");
+    PMSG(LOG_ERR, "Should never get here.");
     return ENOTSUP;
   }
 }
@@ -739,11 +748,15 @@ int tree_get_min(tnode *node) {
  */
 int tree_sub_get_min(fileptr root, tnode *node) {
   DEBUG("tree_sub_get_min(%lu)", root);
-  if (!root)
+  if (!root) {
+    PMSG(LOG_ERR, "Root is zero");
     return 0;
+  }
 
-  if (tree_read(root, (tblock*)node))
+  if (tree_read(root, (tblock*)node)) {
+    PMSG(LOG_ERR, "Error reading block %lu", root);
     return EIO;
+  }
 
   /* check node is cell block */
   if (node->magic == MAGIC_DATANODE) {
@@ -751,14 +764,17 @@ int tree_sub_get_min(fileptr root, tnode *node) {
     root=((tdata*)node)->subkeys;
     return tree_sub_get_min(root, node);
   } else if (node->magic != MAGIC_TREENODE) {
-    DEBUG("Invalid magic number (%lX)", node->magic);
+    PMSG(LOG_ERR, "Invalid magic number (%lX) for block %lu", node->magic, root);
     return EBADF;
   }
 
   while (!node->leaf) {
     root=node->ptrs[0];
-    if (tree_read(root, (tblock*)node))
+
+    if (tree_read(root, (tblock*)node)) {
+      PMSG(LOG_ERR, "Error reading block %lu", root);
       return EIO;
+    }
   }
   return 0;
 }
@@ -814,7 +830,7 @@ fileptr tree_sub_search(fileptr root, char *key) {
   errno=0;
   DEBUG("Searching for \"%s\" from block %lu", key, root);
   if (!root) {
-    DEBUG("Root is zero; nowhere to start");
+    PMSG(LOG_ERR, "Root is zero; nowhere to start");
     errno=ENOENT;
     return 0;
   }
@@ -830,7 +846,7 @@ fileptr tree_sub_search(fileptr root, char *key) {
       root=((tdata*)&node)->subkeys;
       return tree_sub_search(root, key);
     } else if (node.magic != MAGIC_TREENODE) {
-      DEBUG("Invalid magic number (%lX)", node.magic);
+      PMSG(LOG_ERR, "Invalid magic number (%lX)", node.magic);
       errno=EBADF;
       return 0;
     }
@@ -921,7 +937,7 @@ static int tree_insert_key(tnode *node, unsigned int keyindex, char **key, filep
     DEBUG("Key now: \"%s\"", *key);
     DEBUG("Setting pointer");
     if (!(*ptr = tree_alloc())) {
-      DEBUG("Allocation failed");
+      PMSG(LOG_ERR, "Allocation failed");
       return 0;
     }
     DEBUG("Post-alloc");
@@ -933,7 +949,7 @@ static int tree_insert_key(tnode *node, unsigned int keyindex, char **key, filep
     }
     DEBUG("Writing new node");
     if ((result=tree_write(*ptr, (tblock*)&newnode))) {
-      DEBUG("Problem writing block: %s", strerror(errno));
+      PMSG(LOG_ERR, "Problem writing block: %s", strerror(errno));
       return 0;
     }
   }
@@ -968,19 +984,19 @@ static int tree_insert_recurse (fileptr root, char **key, fileptr *ptr) {
 
       DEBUG("Writing subkey root block");
       if (tree_write(((tdata*)&node)->subkeys, (tblock*)&nblock)) {
-        DEBUG("Problem writing subkey root: %s", strerror(errno));
+        PMSG(LOG_ERR, "Problem writing subkey root: %s", strerror(errno));
         return 0;
       }
       DEBUG("Linking to subkeys");
       if (tree_write(root, (tblock*)&node)) {
-        DEBUG("Problem updating node: %s", strerror(errno));
+        PMSG(LOG_ERR, "Problem updating node: %s", strerror(errno));
         return 0;
       }
     }
     root=((tdata*)&node)->subkeys;
     return tree_insert_recurse(root, key, ptr);
   } else if (node.magic != MAGIC_TREENODE) {
-    DEBUG("Invalid magic number for block %lu: %lX", root, node.magic);
+    PMSG(LOG_ERR, "Invalid magic number for block %lu: %lX", root, node.magic);
     errno=EBADF;
     return 0;
   }
@@ -993,21 +1009,21 @@ static int tree_insert_recurse (fileptr root, char **key, fileptr *ptr) {
     DEBUG("Not a leaf; recursing");
     tmp = tree_insert_recurse(node.ptrs[keyindex], key, ptr);
     if (errno) {
-      DEBUG("Recursion returned %d and error message \"%s\"; aborting.", tmp, strerror(errno));
+      PMSG(LOG_ERR, "Recursion returned %d and error message \"%s\"; aborting.", tmp, strerror(errno));
       return 0;
     } else {
       DEBUG("Recursion returned %d", tmp);
     }
   }
   if (keymatch) {
-    DEBUG("Key \"%s\" already in tree", *key);
+    PMSG(LOG_WARN, "Key \"%s\" already in tree", *key);
     errno=EEXIST;
   } else if (tmp > 0 || node.leaf) {
     DEBUG("Inserting key \"%s\"", *key);
     tmp = tree_insert_key(&node, keyindex, key, ptr);
     DUMPNODE(&node);
     if (tree_write(root, (tblock*)&node)) {
-      DEBUG("Problem writing node: %s", strerror(errno));
+      PMSG(LOG_ERR, "Problem writing node: %s", strerror(errno));
       return 0;
     }
   }
@@ -1051,15 +1067,33 @@ fileptr tree_sub_insert(fileptr root, tkey key, tdata *data) {
       return 0;
     }
     if (dataroot.magic != MAGIC_DATANODE) {
-      DEBUG("Not a data node; PANIC.");
+      PMSG(LOG_ERR, "Not a data node; PANIC.");
       errno=EBADF;
       return 0;
     }
   }
 
-  if (!dataroot.subkeys) {
-    DEBUG("No tree to insert into!");
-    errno=ENOENT;
+  if (root && !dataroot.subkeys) {
+    tnode nblock;
+
+    DEBUG("No subkey root; creating one");
+    dataroot.subkeys=tree_alloc();
+    initTreeNode(&nblock);
+    nblock.leaf=1;
+    nblock.keycount=0;
+
+    DEBUG("Writing subkey root block");
+    if (tree_write(dataroot.subkeys, (tblock*)&nblock)) {
+      PMSG(LOG_ERR, "Problem writing subkey root: %s", strerror(errno));
+      return 0;
+    }
+    DEBUG("Linking to subkeys");
+    if (tree_write(root, (tblock*)&dataroot)) {
+      PMSG(LOG_ERR, "Problem updating node: %s", strerror(errno));
+      return 0;
+    }
+  } else if (!root && !dataroot.subkeys) {
+    PMSG(LOG_ERR, "PANIC! Superblock does not point to a tree!");
     return 0;
   }
 
@@ -1069,7 +1103,7 @@ fileptr tree_sub_insert(fileptr root, tkey key, tdata *data) {
   split=tree_insert_recurse(dataroot.subkeys, &ikey, &ptr);
   if (errno) {
     int tmperrno;
-    DEBUG("Hit an error (%s) - freeing reallocated block", strerror(errno));
+    PMSG(LOG_ERR, "Hit an error (%s) - freeing reallocated block", strerror(errno));
     tmperrno=errno;
     tree_free(newnode);
     free(ikey);
@@ -1162,14 +1196,14 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
   if (node.magic == MAGIC_DATANODE) {
     DEBUG("Starting removal at data node; using subkeys");
     if (!((tdata*)&node)->subkeys) {
-      DEBUG("No subkey root; can't delete from there!");
+      PMSG(LOG_ERR, "No subkey root; can't delete from there!");
       errno=ENOENT;
       return -errno;
     }
     root=((tdata*)&node)->subkeys;
     return tree_remove_recurse(root, key, ptr);
   } else if (node.magic != MAGIC_TREENODE) {
-    DEBUG("Invalid magic number for block %lu: %lX", root, node.magic);
+    PMSG(LOG_ERR, "Invalid magic number for block %lu: %lX", root, node.magic);
     errno=EBADF;
     return -errno;
   }
@@ -1290,7 +1324,7 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
         if (rightsteal<0) rightsteal=0;
         DEBUG("Handing %u keys to left node, %u to right", leftsteal, rightsteal);
         if (!leftsteal && !rightsteal) {
-          DEBUG("\033[1;5;31mPANIC AT THE TREE! CAN'T FIND ANY SIBLINGS! ARGH!\033[m");
+          PMSG(LOG_ERR, "\033[1;5;31mPANIC AT THE TREE! CAN'T FIND ANY SIBLINGS! ARGH!\033[m");
           return -EIO;
         }
         /* give keys and pointers to the left sibling */
@@ -1358,11 +1392,11 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
     DEBUG("Considering removing key \"%s\"", *key);
     theptr = node.ptrs[keyindex];
     if (tree_read(theptr, (tblock*)&dblock)) {
-      DEBUG("Problem reading data block");
+      PMSG(LOG_ERR, "Problem reading data block");
       return -EIO;
     }
     if (dblock.subkeys) {
-      DEBUG("Node has subkeys - must not be deleted!");
+      PMSG(LOG_WARN, "Node has subkeys - must not be deleted!");
       errno=ENOTEMPTY;
       return -ENOTEMPTY;
     }
@@ -1373,7 +1407,7 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
       /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
       for (inodeptr = dblock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {
         if (tree_read(inodeptr, (tblock*)&ib) || tree_free(inodeptr)) {
-          DEBUG("Problem reading inode block");
+          PMSG(LOG_ERR, "Problem reading inode block");
           return -EIO;
         }
       }
@@ -1424,7 +1458,7 @@ int tree_sub_remove(fileptr root, tkey key) {
       return -EIO;
     }
     if (dataroot.magic != MAGIC_DATANODE) {
-      DEBUG("Not a data node; PANIC.");
+      PMSG(LOG_ERR, "Not a data node; PANIC.");
       DUMPBLOCK((tblock*)&dataroot);
       errno=EBADF;
       return -EBADF;
@@ -1432,7 +1466,7 @@ int tree_sub_remove(fileptr root, tkey key) {
   }
 
   if (!dataroot.subkeys) {
-    DEBUG("No tree to remove from!");
+    PMSG(LOG_WARN, "No tree to remove from!");
     errno=ENOENT;
     return -ENOENT;
   }
@@ -1441,7 +1475,7 @@ int tree_sub_remove(fileptr root, tkey key) {
   merge=tree_remove_recurse(dataroot.subkeys, &ikey, &ptr);
 
   if (errno) {
-    DEBUG("Hit an error (%s) - chickening out", strerror(errno));
+    PMSG(LOG_ERR, "Hit an error (%s) - chickening out", strerror(errno));
     free(ikey);
     return (errno==ENOTEMPTY)?-ENOTEMPTY:-EIO;
   } else {
@@ -1509,8 +1543,40 @@ int tree_write_sb (tsblock *super) {
  * @param[in]  block  The first block index to read.
  * @param[out] inodes A pointer which will be filled with an array of inodes.
  * @param[in]  max    Maximum number of inodes the array can contain.
- * @returns Zero on success, or an error code on failure.
+ * @returns Zero on success, or a negative error code on failure.
  */
 int inode_fetch_all(fileptr block, fileptr *inodes, int max) {
   tdata datablock;
+
+  if (!inodes) {
+    PMSG(LOG_ERR, "inodes argument is NULL");
+    return -EINVAL;
+  }
+
+  if (!block) {
+    DEBUG("Starting at superblock and reading inodes in limbo");
+  } else {
+    DEBUG("Starting at block index %lu", block);
+    if (tree_read(block, (tblock*)&datablock)) {
+      PMSG(LOG_ERR, "Problem reading data block");
+      return -EIO;
+    }
+    if (datablock.inodecount > max) {
+      PMSG(LOG_ERR, "Number of inodes (%u) greater than output array size (%d)", datablock.inodecount, max);
+      return -ENOMEM;
+    }
+    if (datablock.inodecount > INODECOUNT) {
+      fileptr inodeptr;
+      tinode ib;
+      /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
+      for (inodeptr = datablock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {
+        if (tree_read(inodeptr, (tblock*)&ib) || tree_free(inodeptr)) {
+          PMSG(LOG_ERR, "Problem reading inode block");
+          return -EIO;
+        }
+      }
+    }
+  }
+
+  return ENOTSUP;
 }
