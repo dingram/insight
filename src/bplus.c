@@ -1562,6 +1562,7 @@ static int _inodecmp(const void *p1, const void *p2) {
  * @returns Zero on success, or a negative error code on failure.
  */
 int inode_put_all(fileptr block, fileptr *inodes, int count) {
+#if 0
   tdata datablock;
   int curinode=0;
 
@@ -1610,6 +1611,7 @@ int inode_put_all(fileptr block, fileptr *inodes, int count) {
     memcpy(&inodes[curinode], ib.inodes, ib.inodecount*sizeof(fileptr));
     curinode += MIN(ib.inodecount, INODECOUNT);
   }
+#endif
 
   return 0;
 }

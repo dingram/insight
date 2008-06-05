@@ -262,40 +262,44 @@ static int insight_readdir(const char *path, void *buf,
   filler(buf, "..", NULL, 0);
 
   /* fill with files - no query happening here yet though */
-  fileptr *inodearray;
-  int inodecount;
+  if (!*last_tag) {
+    fileptr *inodearray;
+    int inodecount;
 
-  if ((inodecount = inode_fetch_all(0, NULL, 0)) < 0) {
-    PMSG(LOG_ERR, "IO error in getting inode list");
-    ifree(last_tag);
-    return -EIO;
-  }
-
-  DEBUG("%d inodes to consider", inodecount);
-
-  if (inodecount>0) {
-    inodearray = calloc(inodecount, sizeof(fileptr));
-    if (!inodearray) {
-      PMSG(LOG_ERR, "Failed to allocate memory for inode array of %d elements", inodecount);
-      return -ENOMEM;
+    if ((inodecount = inode_get_all(0, NULL, 0)) < 0) {
+      PMSG(LOG_ERR, "IO error in getting inode list");
+      ifree(last_tag);
+      return -EIO;
     }
-    inode_get_all(0, inodearray, 0);
 
-    char *str;
+    DEBUG("%d inodes to consider", inodecount);
 
-    for (i=0; i<inodecount; i++) {
-      str = basename_from_inode(inodearray[i], insight.repository);
-      if (str) {
-        DEBUG("Adding filename \"%s\" to listing", str);
-        filler(buf, str, NULL, 0);
-      } else {
-        FMSG(LOG_ERR, "Error getting filename for inode %08lX", inodearray[i]);
+    if (inodecount>0) {
+      inodearray = calloc(inodecount, sizeof(fileptr));
+      if (!inodearray) {
+        PMSG(LOG_ERR, "Failed to allocate memory for inode array of %d elements", inodecount);
+        return -ENOMEM;
       }
-    }
+      inode_get_all(0, inodearray, 0);
 
-    DEBUG("Freeing inode array");
-    ifree(inodearray);
+      char *str;
+
+      for (i=0; i<inodecount; i++) {
+        str = basename_from_inode(inodearray[i], insight.repository);
+        if (str) {
+          DEBUG("Adding filename \"%s\" to listing", str);
+          filler(buf, str, NULL, 0);
+        } else {
+          FMSG(LOG_ERR, "Error getting filename for inode %08lX", inodearray[i]);
+        }
+      }
+
+      DEBUG("Freeing inode array");
+      ifree(inodearray);
+    }
   }
+
+  /* And now for directories */
 
   if (tree_sub_get_min(tree_root, &node)) {
     PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed\n");
