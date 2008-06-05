@@ -7,10 +7,12 @@
 #ifdef _DEBUG
 static inline void DUMPSB(tsblock *node) {
   printf(" [SUPERBLOCK]\n");
-  printf("  version:    %d.%d\n", node->version>>8, node->version & 0xff);
-  printf("  root index: %lu\n", node->root_index);
-  printf("  max size:   %lu\n", node->max_size);
-  printf("  free head:  %lu\n", node->free_head);
+  printf("  version:     %d.%d\n", node->version>>8, node->version & 0xff);
+  printf("  root index:  %lu\n", node->root_index);
+  printf("  max size:    %lu\n", node->max_size);
+  printf("  free head:   %lu\n", node->free_head);
+  printf("  limbo inode: %lu\n", node->inode_limbo);
+  printf("  limbo count: %lu\n", node->limbo_count);
 }
 static inline void DUMPNODE(tnode *node) {
   unsigned int i;
@@ -31,8 +33,18 @@ static inline void DUMPDATA(tdata *node) {
   printf("  flags: %x\n", node->flags);
   printf("  subkeys: %lu\n", node->subkeys);
   printf("  inodes:");
-  for(i=0;i<INODECOUNT;i++) printf(" [%lx]", node->inodes[i]);
+  for(i=0;i<INODECOUNT;i++) printf((i>=node->inodecount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->inodes[i]);
   printf("\n");
+  printf("  next_inodes: %lu\n", node->next_inodes);
+}
+static inline void DUMPINODE(tinode *node) {
+  int i;
+  printf(" [INODE BLOCK]\n");
+  printf("  inodecount:     %d\n", node->inodecount);
+  printf("  inodes:");
+  for(i=0;i<INODECOUNT;i++) printf((i>=node->inodecount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->inodes[i]);
+  printf("\n");
+  printf("  next_inodes: %lu\n", node->next_inodes);
 }
 static inline void DUMPFREE(freeblock *node) {
   printf(" [FREE BLOCK]\n");
@@ -53,8 +65,10 @@ static inline void DUMPBLOCK(tblock *node) {
     case MAGIC_FREEBLOCK:
       DUMPFREE((freeblock*)node);
       break;
-    case MAGIC_STRINGENTRY:
     case MAGIC_INODEBLOCK:
+      DUMPINODE((tinode*)node);
+      break;
+    case MAGIC_STRINGENTRY:
     default:
       break;
   }
@@ -63,6 +77,7 @@ static inline void DUMPBLOCK(tblock *node) {
 # define DUMPSB(x)
 # define DUMPNODE(x)
 # define DUMPDATA(x)
+# define DUMPINODE(x)
 # define DUMPFREE(x)
 # define DUMPBLOCK(x)
 #endif

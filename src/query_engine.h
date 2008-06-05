@@ -30,24 +30,28 @@
  * Your fair use and other rights are in no way affected by the above.
  */
 
+#include <bplus.h>
+
 /**
  * The type of a query tree element.
  */
 enum qelem_type {
-  QUERY_IS_ANY, /**< Matches any tag */
-  QUERY_IS,     /**< Matches a specific tag */
-  QUERY_NOT,    /**< Matches if not a specific tag or subquery */
-  QUERY_AND,    /**< Matches if both subqueries match */
-  QUERY_OR      /**< Matches is at least one subquery matches */
+  QUERY_IS_ANY,   /**< Matches any tag */
+  QUERY_IS,       /**< Matches a specific tag */
+  QUERY_IS_INODE, /**< Matches a specific tag */
+  QUERY_NOT,      /**< Matches if not a specific tag or subquery */
+  QUERY_AND,      /**< Matches if both subqueries match */
+  QUERY_OR        /**< Matches is at least one subquery matches */
 };
 
 /**
  * Query tree element
  */
 typedef struct qelem {
-  enum qelem_type type;   /**< Type of this element (see qelem_type) */
-  char *tag;              /**< The tag. Only used in QUERY_IS and QUERY_NOT nodes */
-  struct qelem *next[2];  /**< Pointers to subparts of query */
+  enum qelem_type  type;      /**< Type of this element (see qelem_type) */
+  char            *tag;       /**< The tag. Only used in QUERY_IS and QUERY_NOT nodes */
+  fileptr          inode;     /**< The target inode. Only used in QUERY_IS_INODE nodes */
+  struct qelem    *next[2];   /**< Pointers to subparts of query */
 } qelem;
 
 /* Prototypes */

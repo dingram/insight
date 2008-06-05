@@ -29,7 +29,7 @@
  */
 
 #include <insight.h>
-#ifndef _DEBUG
+#if defined(_DEBUG_QUERY) && !defined(_DEBUG)
 #define _DEBUG
 #endif
 #include <debug.h>
@@ -55,6 +55,17 @@ static inline qelem *_qtree_make_is(const char *tag) {
   }
   node->type=QUERY_IS;
   node->tag=strdup(tag);
+  return node;
+}
+
+static inline qelem *_qtree_make_is_inode(const fileptr inode) {
+  qelem *node=calloc(1, sizeof(qelem));
+  if (!node) {
+    PMSG(LOG_ERR, "Failed to allocate space for query node");
+    return NULL;
+  }
+  node->type=QUERY_IS_INODE;
+  node->inode=inode;
   return node;
 }
 
@@ -123,6 +134,10 @@ static void _qtree_dump(const qelem *node, int indent) {
       printf("%sIS: %s\n", spc, node->tag);
       break;
 
+    case QUERY_IS_INODE:
+      printf("%sIS_INODE: %lu\n", spc, node->inode);
+      break;
+
     case QUERY_NOT:
       if (node->tag) {
         printf("%sNOT: %s\n", spc, node->tag);
@@ -165,16 +180,12 @@ void qtree_free(qelem **root, int free_tags) {
   if (!*root) return;
 
   if (free_tags && (*root)->tag) {
-    DEBUG("Freeing tag");
     ifree((*root)->tag);
-    DEBUG("Tag free");
   }
 
   qtree_free(&((*root)->next[0]), free_tags);
   qtree_free(&((*root)->next[1]), free_tags);
-  DEBUG("Freeing element");
   ifree(*root);
-  DEBUG("Element free");
   *root=NULL;
 }
 
@@ -201,13 +212,20 @@ int qtree_consistent(qelem *root, int strict) {
   switch (root->type) {
     case QUERY_IS_ANY:
       if (!strict) return 1;
-      if (root->tag || root->next[0] || root->next[1]) return 0;
+      if (root->inode || root->tag || root->next[0] || root->next[1]) return 0;
       return 1;
       break;
 
     case QUERY_IS:
       if (!root->tag) return 0;
       if (!strict) return 1;
+      if (root->inode || root->next[0] || root->next[1]) return 0;
+      return 1;
+      break;
+
+    case QUERY_IS_INODE:
+      if (!strict) return 1;
+      if (root->tag) return 0;
       if (root->next[0] || root->next[1]) return 0;
       return 1;
       break;
@@ -215,14 +233,14 @@ int qtree_consistent(qelem *root, int strict) {
     case QUERY_NOT:
       if ( (root->tag && root->next[0]) || (!root->tag && !root->next[0]) )
         return 0;
-      if (strict && root->next[1]) return 0;
+      if (strict && (root->inode || root->next[1])) return 0;
       return 1;
       break;
 
     case QUERY_AND:
     case QUERY_OR:
       if (!root->next[0] || !root->next[1]) return 0;
-      if (strict && root->tag) return 0;
+      if (strict && (root->inode || root->tag)) return 0;
       return qtree_consistent(root->next[0], strict) && qtree_consistent(root->next[0], strict);
       break;
 
@@ -303,6 +321,7 @@ int query_get_subtags(const qelem *query, char *parent, int len) {
   /* Essentially just search the tree for incomplete tags */
   switch (query->type) {
     case QUERY_IS_ANY:
+    case QUERY_IS_INODE:
       strncpy(parent, "", len);
       return 0;
       break;

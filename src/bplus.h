@@ -27,7 +27,7 @@
 #define MAGIC_DATANODE    0xda7ab10c /**< Tree data node (data block) */
 #define MAGIC_STRINGENTRY 0x7ec5b10c /**< String table entry (text block) [currently unused] */
 #define MAGIC_FREEBLOCK   0xf1eeb10c /**< Free block (free block) */
-#define MAGIC_INODEBLOCK  0x10deb10c /**< Inode block (inode block) [currently unused] */
+#define MAGIC_INODEBLOCK  0x10deb10c /**< Inode block (inode block) */
 #define MAGIC_INODETABLE  0x7ab1b10c /**< Inode translation table entry (table block) [currently unused] */
 /*@}*/
 
@@ -40,6 +40,8 @@
 #define initDataNode(n) do { bzero((n),sizeof(tdata)); (n)->magic=MAGIC_DATANODE; } while (0)
 /** Initialise a free block (zero it and set its magic number) */
 #define initFreeNode(n) do { bzero((n),sizeof(freeblock)); (n)->magic=MAGIC_FREEBLOCK; } while (0)
+/** Initialise a inode block (zero it and set its magic number) */
+#define initInodeBlock(n) do { bzero((n),sizeof(freeblock)); (n)->magic=MAGIC_INODEBLOCK; } while (0)
 
 /** An address within a file */
 typedef unsigned long fileptr;
@@ -153,13 +155,24 @@ fileptr tree_sub_insert   (fileptr node, tkey key, tdata *data);
 int     tree_read_sb      (tsblock *super);
 int     tree_write_sb     (tsblock *super);
 
-fileptr treed_search      (fileptr key);
-fileptr treed_sub_search  (fileptr root, fileptr key);
-int     treed_remove      (fileptr key);
-int     treed_sub_remove  (fileptr root, fileptr key);
-fileptr treed_insert      (fileptr key, tddata *data);
-fileptr treed_sub_insert  (fileptr node, fileptr key, tddata *data);
+int inode_put_all(fileptr block, fileptr *inodes, int count);
+int inode_get_all(fileptr block, fileptr *inodes, int max);
 
+#ifndef MAX
+#define MAX(a,b)      ((a) > (b) ? (a) : (b))
+#endif
+
+#ifndef MIN
+#define MIN(a,b)      ((a) < (b) ? (a) : (b))
+#endif
+
+#ifndef MAX3
+#define MAX3(a,b,c)   (MAX(a, MAX(b, c)))
+#endif
+
+#ifndef MIN3
+#define MIN3(a,b,c)   (MIN(a, MIN(b, c)))
+#endif
 
 #endif /* #ifndef __BPLUS_H */
 

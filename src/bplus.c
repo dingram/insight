@@ -8,11 +8,9 @@
 #include <errno.h>
 #include <assert.h>
 
-/*
-#ifndef _DEBUG
+#if defined(_DEBUG_BPLUS) && !defined(_DEBUG)
 #define _DEBUG
 #endif
-*/
 #include "bplus.h"
 #include "bplus_debug.h"
 #include "bplus_priv.h"
@@ -303,7 +301,7 @@ int tree_close (void) {
       for (i=0; i<tree_sb->max_size+1; i++) {
 #ifdef TREE_CACHE_ENABLED
         if (tree_stats[i].reads || tree_stats[i].writes || tree_stats[i].cache_reads || tree_stats[i].cache_writes) {
-          DEBUG("Stats[%4u]: %5u reads; %5u writes; %5u cache reads; %5u cache writes", i, tree_stats[i].reads, tree_stats[i].writes, tree_stats[i].cache_reads, tree_stats[i].cache_writes);
+          DEBUG("Stats[%4u]: %5llu reads; %5llu writes; %5llu cache reads; %5llu cache writes", i, tree_stats[i].reads, tree_stats[i].writes, tree_stats[i].cache_reads, tree_stats[i].cache_writes);
           total_reads        += tree_stats[i].reads;
           total_writes       += tree_stats[i].writes;
           total_cache_reads  += tree_stats[i].cache_reads;
@@ -311,7 +309,7 @@ int tree_close (void) {
         }
 #else
         if (tree_stats[i].reads || tree_stats[i].writes) {
-          DEBUG("Stats[%4u]: %5u reads; %5u writes", i, tree_stats[i].reads, tree_stats[i].writes);
+          DEBUG("Stats[%4u]: %5llu reads; %5llu writes", i, tree_stats[i].reads, tree_stats[i].writes);
           total_reads        += tree_stats[i].reads;
           total_writes       += tree_stats[i].writes;
         }
@@ -1537,46 +1535,139 @@ int tree_write_sb (tsblock *super) {
 }
 
 /**
- * Fetch all inodes from the given block, following links as required. The \a
- * block argument may refer to either a data block or the superblock (if zero).
+ * Compare two inodes for sorting purposes.
  *
- * @param[in]  block  The first block index to read.
- * @param[out] inodes A pointer which will be filled with an array of inodes.
- * @param[in]  max    Maximum number of inodes the array can contain.
+ * @param p1 Pointer to first inode.
+ * @param p2 Pointer to second inode.
+ * @returns Positive integer if p1>p2, negative integer if p2>p1, zero if p1==p2.
+ */
+static int _inodecmp(const void *p1, const void *p2) {
+  return (*(int*)p1>*(int*)p2) ?  1 :
+         (*(int*)p1<*(int*)p2) ? -1 :
+         0;
+}
+
+
+/**
+ * Write all inodes to the given block, following links as required. The \a
+ * block argument may refer to either a data block or the superblock (if zero).
+ * Additional inode blocks will be allocated if required, and they may also be
+ * freed.
+ *
+ * @note The input inodes array will be sorted if it is not already.
+ *
+ * @param[in] block  The block index to write an inode list for.
+ * @param[in] inodes A pointer to an array of inodes.
+ * @param[in] count  Number of inodes in the array.
  * @returns Zero on success, or a negative error code on failure.
  */
-int inode_fetch_all(fileptr block, fileptr *inodes, int max) {
+int inode_put_all(fileptr block, fileptr *inodes, int count) {
   tdata datablock;
+  int curinode=0;
 
   if (!inodes) {
-    PMSG(LOG_ERR, "inodes argument is NULL");
-    return -EINVAL;
+    PMSG(LOG_ERR, "No inode list given");
+    return -ENOENT;
   }
 
+  DEBUG("Sorting inode list");
+  /* XXX: make sure the list is sorted */
+  qsort(inodes, count, sizeof(fileptr), _inodecmp);
+  DEBUG("List sorted");
+
   if (!block) {
-    DEBUG("Starting at superblock and reading inodes in limbo");
+    DEBUG("Starting at superblock and writing inodes in limbo");
+    datablock.inodecount = tree_sb->limbo_count;
+    datablock.next_inodes = tree_sb->inode_limbo;
   } else {
     DEBUG("Starting at block index %lu", block);
     if (tree_read(block, (tblock*)&datablock)) {
       PMSG(LOG_ERR, "Problem reading data block");
       return -EIO;
     }
+    if (!inodes) {
+      DEBUG("Number of array entries required: %u", datablock.inodecount);
+      return datablock.inodecount;
+    }
     if (datablock.inodecount > max) {
       PMSG(LOG_ERR, "Number of inodes (%u) greater than output array size (%d)", datablock.inodecount, max);
       return -ENOMEM;
     }
-    if (datablock.inodecount > INODECOUNT) {
-      fileptr inodeptr;
-      tinode ib;
-      /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
-      for (inodeptr = datablock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {
-        if (tree_read(inodeptr, (tblock*)&ib) || tree_free(inodeptr)) {
-          PMSG(LOG_ERR, "Problem reading inode block");
-          return -EIO;
-        }
-      }
-    }
+
+    DEBUG("Copying inodes to user buffer");
+    memcpy(inodes, datablock.inodes, MIN(datablock.inodecount, INODECOUNT)*sizeof(fileptr));
+    curinode += MIN(datablock.inodecount, INODECOUNT);
   }
 
-  return ENOTSUP;
+  fileptr inodeptr;
+  tinode ib;
+  /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
+  for (inodeptr = datablock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {
+    if (tree_read(inodeptr, (tblock*)&ib) || ib.magic!=MAGIC_INODEBLOCK) {
+      PMSG(LOG_ERR, "Problem reading inode block");
+      return -EIO;
+    }
+    memcpy(&inodes[curinode], ib.inodes, ib.inodecount*sizeof(fileptr));
+    curinode += MIN(ib.inodecount, INODECOUNT);
+  }
+
+  return 0;
+}
+
+/**
+ * Fetch all inodes from the given block, following links as required. The \a
+ * block argument may refer to either a data block or the superblock (if zero).
+ *
+ * @param[in]  block  The first block index to read.
+ * @param[out] inodes A pointer which will be filled with an array of inodes.
+ * If NULL, then the function returns the space required.
+ * @param[in]  max    Maximum number of inodes the array can contain.
+ * @returns Zero on success, the number of inodes if \a inodes is NULL, or a
+ * negative error code on failure.
+ */
+int inode_get_all(fileptr block, fileptr *inodes, int max) {
+  tdata datablock;
+  int curinode=0;
+
+  if (!block) {
+    DEBUG("Starting at superblock and reading inodes in limbo");
+    if (!inodes) {
+      DEBUG("Number of array entries required: %lu", tree_sb->limbo_count);
+      return (int)tree_sb->limbo_count;
+    }
+    datablock.inodecount = tree_sb->limbo_count;
+    datablock.next_inodes = tree_sb->inode_limbo;
+  } else {
+    DEBUG("Starting at block index %lu", block);
+    if (tree_read(block, (tblock*)&datablock)) {
+      PMSG(LOG_ERR, "Problem reading data block");
+      return -EIO;
+    }
+    if (!inodes) {
+      DEBUG("Number of array entries required: %u", datablock.inodecount);
+      return datablock.inodecount;
+    }
+    if (datablock.inodecount > max) {
+      PMSG(LOG_ERR, "Number of inodes (%u) greater than output array size (%d)", datablock.inodecount, max);
+      return -ENOMEM;
+    }
+
+    DEBUG("Copying inodes to user buffer");
+    memcpy(inodes, datablock.inodes, MIN(datablock.inodecount, INODECOUNT)*sizeof(fileptr));
+    curinode += MIN(datablock.inodecount, INODECOUNT);
+  }
+
+  fileptr inodeptr;
+  tinode ib;
+  /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
+  for (inodeptr = datablock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {
+    if (tree_read(inodeptr, (tblock*)&ib) || ib.magic!=MAGIC_INODEBLOCK) {
+      PMSG(LOG_ERR, "Problem reading inode block");
+      return -EIO;
+    }
+    memcpy(&inodes[curinode], ib.inodes, ib.inodecount*sizeof(fileptr));
+    curinode += MIN(ib.inodecount, INODECOUNT);
+  }
+
+  return 0;
 }

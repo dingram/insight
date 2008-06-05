@@ -29,11 +29,9 @@
  */
 
 #include <insight.h>
-/*
-#ifndef _DEBUG
+#if defined(_DEBUG_PATH) && !defined(_DEBUG)
 #define _DEBUG
 #endif
-*/
 #include <debug.h>
 #include <string_helpers.h>
 #include <path_helpers.h>
@@ -283,16 +281,53 @@ char *gen_repos_path(const char *hash, int create, const char *repos_base) {
   return finaldest;
 }
 
-int have_file_by_hash(const char *hash, struct stat *stat, const char *repos_base) {
+int have_file_by_hash(const char *hash, struct stat *fstat, const char *repos_base) {
   char *filepath = gen_repos_path(hash, 0, repos_base);
   if (!filepath) return 0;
-  return !((lstat(filepath, stat) == -1) && (errno == ENOENT));
+  return !((stat(filepath, fstat) == -1) && (errno == ENOENT));
 }
 
-int have_file_by_name(const char *path, struct stat *stat, const char *repos_base) {
+int have_file_by_name(const char *path, struct stat *fstat, const char *repos_base) {
   char hash[9];
   DEBUG("Input path: %s", path);
   snprintf(hash, 9, "%08lX", hash_path(path, strlen(path)));
   DEBUG("Path hash: %s", hash);
-  return have_file_by_hash(hash, stat, repos_base);
+  return have_file_by_hash(hash, fstat, repos_base);
+}
+
+char *basename_from_inode(const fileptr inode, const char *repos_base) {
+  char hash[9];
+  snprintf(hash, 9, "%08lX", inode);
+  DEBUG("Input hash: %s", hash);
+  char *filepath = gen_repos_path(hash, 0, repos_base);
+  DEBUG("Repository path: %s", filepath);
+  if (!filepath) {
+    PMSG(LOG_ERR, "Inode %08lX has vanished from repository", inode);
+    return NULL;
+  }
+
+  char *linkres = calloc(512, sizeof(char));
+  if (!linkres) {
+    PMSG(LOG_ERR, "Failed to allocate memory");
+    return NULL;
+  }
+
+  ssize_t result = readlink(filepath, linkres, 512);
+  if (result<0) {
+    PMSG(LOG_ERR, "Failed to read link \"%s\": %s", filepath, strerror(errno));
+    DEBUG("Freeing filepath");
+    ifree(filepath);
+    DEBUG("Freeing linkres");
+    ifree(linkres);
+    return NULL;
+  }
+
+  char *answer = strlast(linkres, '/');
+
+  DEBUG("Freeing filepath");
+  ifree(filepath);
+  DEBUG("Freeing linkres");
+  ifree(linkres);
+
+  return answer;
 }

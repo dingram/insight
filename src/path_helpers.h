@@ -44,5 +44,6 @@ int check_mkdir(const char *path);
 char *gen_repos_path(const char *hash, int create, const char *repos_base);
 int have_file_by_name(const char *path, struct stat *stat, const char *repos_base);
 int have_file_by_hash(const char *hash, struct stat *stat, const char *repos_base);
+char *basename_from_inode(const fileptr inode, const char *repos_base);
 
 #endif

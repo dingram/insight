@@ -158,7 +158,7 @@ static int insight_getattr(const char *path, struct stat *stbuf)
   DEBUG("Getattr called on path \"%s\"", canon_path);
 
   if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
-    DEBUG("Got a file");
+    DEBUG("Got a file\n");
 
     memcpy(stbuf, &fstat, sizeof(struct stat));
     return 0;
@@ -247,11 +247,9 @@ static int insight_readdir(const char *path, void *buf,
 
   DEBUG("Freeing query tree...");
   qtree_free(&q, 1);
-  DEBUG("Query tree freed.");
 
   fileptr tree_root=tree_get_root();
 
-  DEBUG("Calling get_tag");
   if (*last_tag && (tree_root=get_tag(last_tag))==0) {
     DEBUG("Tag \"%s\" not found", last_tag);
     ifree(last_tag);
@@ -263,8 +261,44 @@ static int insight_readdir(const char *path, void *buf,
   filler(buf, ".", NULL, 0);
   filler(buf, "..", NULL, 0);
 
+  /* fill with files - no query happening here yet though */
+  fileptr *inodearray;
+  int inodecount;
+
+  if ((inodecount = inode_fetch_all(0, NULL, 0)) < 0) {
+    PMSG(LOG_ERR, "IO error in getting inode list");
+    ifree(last_tag);
+    return -EIO;
+  }
+
+  DEBUG("%d inodes to consider", inodecount);
+
+  if (inodecount>0) {
+    inodearray = calloc(inodecount, sizeof(fileptr));
+    if (!inodearray) {
+      PMSG(LOG_ERR, "Failed to allocate memory for inode array of %d elements", inodecount);
+      return -ENOMEM;
+    }
+    inode_get_all(0, inodearray, 0);
+
+    char *str;
+
+    for (i=0; i<inodecount; i++) {
+      str = basename_from_inode(inodearray[i], insight.repository);
+      if (str) {
+        DEBUG("Adding filename \"%s\" to listing", str);
+        filler(buf, str, NULL, 0);
+      } else {
+        FMSG(LOG_ERR, "Error getting filename for inode %08lX", inodearray[i]);
+      }
+    }
+
+    DEBUG("Freeing inode array");
+    ifree(inodearray);
+  }
+
   if (tree_sub_get_min(tree_root, &node)) {
-    PMSG(LOG_ERR, "tree_sub_get_min() failed\n");
+    PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed\n");
     ifree(last_tag);
     return -EIO;
   }
@@ -281,16 +315,13 @@ static int insight_readdir(const char *path, void *buf,
   DEBUG("Should we add subtag dir?");
   /* add special directory containing subkeys of this key */
   if (strcmp(path, "/") != 0 && !*last_tag) {
-    DEBUG("Maybe - fetching last bit of path");
     char *lastbit = strlast(canon_path, '/');
     tnode n;
     /* but only if it actually has subkeys */
-    DEBUG("Calling get_tag(\"%s\")", lastbit);
     tree_root=get_tag(lastbit);
 
-    DEBUG("Getting minimum node");
     if (tree_sub_get_min(tree_root, &n)) {
-      PMSG(LOG_ERR, "tree_sub_get_min() failed\n");
+      PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed\n");
       ifree(last_tag);
       return -EIO;
     }
@@ -339,14 +370,10 @@ static int insight_readdir(const char *path, void *buf,
 
   ifree(last_tag);
 
-  DEBUG("Freeing bits");
   for (count--;count>=0; count--) {
     ifree(bits[count]);
   }
-  DEBUG("Freeing bits top-level");
   ifree(bits);
-
-  DEBUG("Returning\n");
 
   return 0;
 }
@@ -421,8 +448,6 @@ static int insight_mkdir(const char *path, mode_t mode)
   }
   DEBUG("Successfully inserted \"%s\" into parent \"%s\"", newdir, parent_tag);
 
-  DEBUG("Returning\n");
-
   return 0;
 }
 
@@ -492,12 +517,11 @@ static int insight_rmdir(const char *path)
     PMSG(LOG_ERR, "Tree removal failed with error: %s\n", strerror(-res));
     return res;
   } else if (res) {
-    PMSG(LOG_ERR, "Tree removal failed\n");
+    PMSG(LOG_ERR, "IO error: Tree removal failed\n");
     return -EIO;
   }
   DEBUG("Successfully removed \"%s\" from parent \"%s\"", olddir, parent_tag);
 
-  DEBUG("Returning\n");
   return 0;
 }
 
@@ -596,14 +620,14 @@ static int insight_symlink(const char *from, const char *to)
 
   finaldest = gen_repos_path(s_hash, 1, insight.repository);
   if (!finaldest) {
-    PMSG(LOG_ERR, "Failed to generate repository path");
+    PMSG(LOG_ERR, "IO error: Failed to generate repository path");
     return -EIO;
   }
 
   DEBUG("Final symlink call: symlink(\"%s\", \"%s\")", from, finaldest);
 
   if (symlink(from, finaldest)==-1) {
-    PMSG(LOG_ERR, "Symlink creation failed: %s", strerror(errno));
+    PMSG(LOG_ERR, "IO error: Symlink creation failed: %s", strerror(errno));
     ifree(finaldest);
     return -EIO;
   }
