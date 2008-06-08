@@ -636,6 +636,13 @@ static int insight_symlink(const char *from, const char *to)
     return -EIO;
   }
 
+  DEBUG("Inserting inode into tree at root level (for now)");
+  if ((errno=inode_insert(0, hash))) {
+    PMSG(LOG_ERR, "IO error: Failed to insert inode into tree: %s\n", strerror(errno));
+    ifree(finaldest);
+    return -EIO;
+  }
+
   ifree(finaldest);
   return 0;
 }

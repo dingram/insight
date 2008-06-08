@@ -24,11 +24,15 @@
 # define DEBUG(f, ...)  PMSG(LOG_DEBUG, f,## __VA_ARGS__)
 # define DEBUGMSG(x)    DEBUG("%s", x)
 # define DUMPINT(x)     DEBUG("%s = %d", #x, x)
+# define DUMPUINT(x)    DEBUG("%s = %u", #x, x)
+# define DUMPFILEPTR(x) DEBUG("%s = %lu", #x, x)
 # define DUMPSTR(x)     DEBUG("%s = \"%s\"", #x, x)
 #else
 # define DEBUG(f, ...)
 # define DEBUGMSG(x)
 # define DUMPINT(x)
+# define DUMPUINT(x)
+# define DUMPFILEPTR(x)
 # define DUMPSTR(x)
 #endif
 

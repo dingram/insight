@@ -84,7 +84,6 @@ static int      tree_cache_flush   (int clear);
 static int      tree_cache_drop    ();
 static tblock * tree_cache_get     (fileptr block);
 static int      tree_cache_put     (fileptr block, tblock *data);
-static void     tree_cache_del     (fileptr block);
 #endif
 
 /** Internal storage of file handle for tree file */

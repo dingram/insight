@@ -14,6 +14,7 @@
 #include "bplus.h"
 #include "bplus_debug.h"
 #include "bplus_priv.h"
+#include "set_ops.h"
 
 /**
  * Format the tree file, initialising the superblock and free space.
@@ -647,16 +648,6 @@ static int tree_cache_put(fileptr block, tblock *data) {
   }
 }
 
-/**
- * Remove block from cache.
- *
- * @todo Implement this function.
- * @todo Is this really necessary?
- */
-static void tree_cache_del(fileptr block) {
-  (void) block;
-  return;
-}
 #endif
 
 /**
@@ -1399,15 +1390,10 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
       return -ENOTEMPTY;
     }
     if (dblock.inodecount > INODECOUNT) {
-      fileptr inodeptr;
-      tinode ib;
       DEBUG("Node has inode blocks - must delete those too!");
-      /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
-      for (inodeptr = dblock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {
-        if (tree_read(inodeptr, (tblock*)&ib) || tree_free(inodeptr)) {
-          PMSG(LOG_ERR, "Problem reading inode block");
-          return -EIO;
-        }
+      if (inode_free_chain(dblock.next_inodes)) {
+        PMSG(LOG_ERR, "Failed to free attached inode chain");
+        return -EIO;
       }
     }
     DEBUG("Removing key \"%s\"", *key);
@@ -1534,19 +1520,69 @@ int tree_write_sb (tsblock *super) {
   return tree_write(0, (tblock*)super);
 }
 
+
 /**
- * Compare two inodes for sorting purposes.
+ * Follow the linked list of inodes starting at the given block number, freeing
+ * all of them.
  *
- * @param p1 Pointer to first inode.
- * @param p2 Pointer to second inode.
- * @returns Positive integer if p1>p2, negative integer if p2>p1, zero if p1==p2.
+ * @param block The block index of the first inode block to be freed.
  */
-static int _inodecmp(const void *p1, const void *p2) {
-  return (*(int*)p1>*(int*)p2) ?  1 :
-         (*(int*)p1<*(int*)p2) ? -1 :
-         0;
+int inode_free_chain(fileptr block) {
+  fileptr inodeptr;
+  tinode ib;
+
+  for (inodeptr = block; inodeptr; inodeptr=ib.next_inodes) {
+    if (tree_read(inodeptr, (tblock*)&ib) || tree_free(inodeptr)) {
+      PMSG(LOG_ERR, "Problem reading inode block");
+      return -EIO;
+    }
+  }
+
+  return 0;
 }
 
+/**
+ * Insert the given inode into the given data block. If block is zero, insert into the limbo list.
+ *
+ * @param block The data block index, or zero for the limbo list.
+ * @param inode The inode to be inserted.
+ * @returns Zero on success, error code on failure.
+ */
+int inode_insert(fileptr block, fileptr inode) {
+  fileptr *inodes;
+  DEBUG("Inserting %08lX into inode list at block %lu", inode, block);
+  int count = inode_get_all(block, NULL, 0);
+  DEBUG("Need %d inodes of space", count);
+  if (count < 0) {
+    PMSG(LOG_ERR, "IO error in getting inode list");
+    return EIO;
+  }
+
+
+  inodes = malloc((count+1)*sizeof(fileptr));
+  if (!inodes) {
+    PMSG(LOG_ERR, "Failed to allocate memory for inodes array");
+    return ENOMEM;
+  }
+  if (inode_get_all(block, inodes, count+1)<0) {
+    PMSG(LOG_ERR, "Failed to get inode array from block %lu", block);
+    free(inodes);
+    return EIO;
+  }
+
+  /* insert node */
+  inodes[count] = inode;
+
+  /* save array back to target block */
+  if (inode_put_all(block, inodes, count+1)<0) {
+    PMSG(LOG_ERR, "Failed to save inode array to block %lu", block);
+    free(inodes);
+    return EIO;
+  }
+
+  free(inodes);
+  return 0;
+}
 
 /**
  * Write all inodes to the given block, following links as required. The \a
@@ -1562,23 +1598,36 @@ static int _inodecmp(const void *p1, const void *p2) {
  * @returns Zero on success, or a negative error code on failure.
  */
 int inode_put_all(fileptr block, fileptr *inodes, int count) {
-#if 0
   tdata datablock;
   int curinode=0;
+  unsigned long oldcount;
 
   if (!inodes) {
     PMSG(LOG_ERR, "No inode list given");
     return -ENOENT;
   }
 
-  DEBUG("Sorting inode list");
   /* XXX: make sure the list is sorted */
-  qsort(inodes, count, sizeof(fileptr), _inodecmp);
-  DEBUG("List sorted");
+  qsort(inodes, count, sizeof(fileptr), inodecmp);
 
   if (!block) {
     DEBUG("Starting at superblock and writing inodes in limbo");
+    oldcount = tree_sb->limbo_count;
+    tree_sb->limbo_count = MIN(count, INODECOUNT);
     datablock.inodecount = tree_sb->limbo_count;
+    if (!tree_sb->inode_limbo) {
+      DEBUG("Creating inode limbo area");
+      tree_sb->inode_limbo = tree_alloc();
+    } else if (curinode >= count && datablock.next_inodes) {
+      DEBUG("Freeing inode block chain");
+      if (inode_free_chain(datablock.next_inodes)) {
+        PMSG(LOG_ERR, "Could not free inode chain");
+        return -EIO;
+      }
+      tree_sb->inode_limbo=0;
+      tree_write_sb(tree_sb);
+    }
+
     datablock.next_inodes = tree_sb->inode_limbo;
   } else {
     DEBUG("Starting at block index %lu", block);
@@ -1586,32 +1635,70 @@ int inode_put_all(fileptr block, fileptr *inodes, int count) {
       PMSG(LOG_ERR, "Problem reading data block");
       return -EIO;
     }
-    if (!inodes) {
-      DEBUG("Number of array entries required: %u", datablock.inodecount);
-      return datablock.inodecount;
-    }
-    if (datablock.inodecount > max) {
-      PMSG(LOG_ERR, "Number of inodes (%u) greater than output array size (%d)", datablock.inodecount, max);
-      return -ENOMEM;
+    oldcount = datablock.inodecount;
+
+    DEBUG("Copying %u inodes from user buffer direct to block", MIN(count, INODECOUNT));
+    datablock.inodecount = MIN(count, INODECOUNT);
+    memcpy(datablock.inodes, inodes, datablock.inodecount*sizeof(fileptr));
+    curinode += datablock.inodecount;
+
+    if (curinode<count && !datablock.next_inodes) {
+      DEBUG("Creating inode block");
+      datablock.next_inodes = tree_alloc();
+    } else if (curinode >= count && datablock.next_inodes) {
+      DEBUG("Freeing inode block chain");
+      if (inode_free_chain(datablock.next_inodes)) {
+        PMSG(LOG_ERR, "Could not free inode chain");
+        return -EIO;
+      }
+      datablock.next_inodes=0;
     }
 
-    DEBUG("Copying inodes to user buffer");
-    memcpy(inodes, datablock.inodes, MIN(datablock.inodecount, INODECOUNT)*sizeof(fileptr));
-    curinode += MIN(datablock.inodecount, INODECOUNT);
+    if (tree_write(block, (tblock*)&datablock)) {
+      PMSG(LOG_ERR, "Problem writing data block");
+      return -EIO;
+    }
   }
 
   fileptr inodeptr;
   tinode ib;
-  /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
-  for (inodeptr = datablock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {
-    if (tree_read(inodeptr, (tblock*)&ib) || ib.magic!=MAGIC_INODEBLOCK) {
-      PMSG(LOG_ERR, "Problem reading inode block");
+
+  DUMPUINT(curinode);
+  DUMPUINT(count);
+  for (inodeptr = datablock.next_inodes; curinode<count; inodeptr=ib.next_inodes) {
+    if (tree_read(inodeptr, (tblock*)&ib)) {
+      PMSG(LOG_ERR, "Problem verifying inode block");
       return -EIO;
     }
-    memcpy(&inodes[curinode], ib.inodes, ib.inodecount*sizeof(fileptr));
-    curinode += MIN(ib.inodecount, INODECOUNT);
+
+    if (ib.magic == MAGIC_FREEBLOCK) {
+      /* taking a big chance here */
+      initInodeBlock(&ib);
+    } else if (ib.magic != MAGIC_INODEBLOCK) {
+      PMSG(LOG_ERR, "Failed to verify inode");
+      return -EIO;
+    }
+    ib.inodecount = MIN(count, INODECOUNT);
+    memcpy(ib.inodes, &inodes[curinode], ib.inodecount*sizeof(fileptr));
+    curinode += ib.inodecount;
+    if (curinode<count && !ib.next_inodes) {
+      DUMPUINT(curinode);
+      DUMPUINT(count);
+      DEBUG("Creating another inode block");
+      ib.next_inodes=tree_alloc();
+      if (!ib.next_inodes) {
+        PMSG(LOG_ERR, "Failed to allocate another inode block");
+        return -ENOSPC;
+      }
+      curinode += MIN(ib.inodecount, INODE_MAX);
+    } else if (curinode >= count && ib.next_inodes) {
+      DEBUG("Freeing chain");
+    }
+    if (tree_write(inodeptr, (tblock*)&ib)) {
+      PMSG(LOG_ERR, "Problem writing data block");
+      return -EIO;
+    }
   }
-#endif
 
   return 0;
 }
@@ -1668,7 +1755,7 @@ int inode_get_all(fileptr block, fileptr *inodes, int max) {
       return -EIO;
     }
     memcpy(&inodes[curinode], ib.inodes, ib.inodecount*sizeof(fileptr));
-    curinode += MIN(ib.inodecount, INODECOUNT);
+    curinode += MIN(ib.inodecount, INODE_MAX);
   }
 
   return 0;

@@ -3,7 +3,9 @@ insight_SOURCES=insight.c \
                 query_engine.c \
                 query_engine.h \
                 string_helpers.c \
-                string_helpers.h \
+                string_helpers.c \
+                set_ops.h \
+                set_ops.c \
                 path_helpers.c \
                 path_helpers.h \
                 debug.h \

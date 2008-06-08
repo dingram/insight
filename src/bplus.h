@@ -113,7 +113,7 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
 /** Inode block referenced by a data block */
 typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   unsigned long magic;        /**< Magic number 0x10deb10c */
-  short inodecount;           /**< Number of inodes held in this block */
+  unsigned short inodecount;  /**< Number of inodes held in this block */
   short unused;               /**< Unused */
   fileptr inodes[INODE_MAX];  /**< List of inodes */
   fileptr next_inodes;        /**< Address of next block of inodes, or zero if none */
@@ -155,6 +155,8 @@ fileptr tree_sub_insert   (fileptr node, tkey key, tdata *data);
 int     tree_read_sb      (tsblock *super);
 int     tree_write_sb     (tsblock *super);
 
+int inode_free_chain(fileptr block);
+int inode_insert(fileptr block, fileptr inode);
 int inode_put_all(fileptr block, fileptr *inodes, int count);
 int inode_get_all(fileptr block, fileptr *inodes, int max);
 
