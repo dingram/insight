@@ -76,26 +76,34 @@ int pstrcmp(const void *p1, const void *p2) {
  * array.
  */
 int set_union(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*)) {
-  if (!set1 || !set2 || !out || !in1count || !in2count || outmax || !elem_size || !cmp) {
+  if (!set1 || !set2 || !out || !in1count || !in2count || !outmax || !elem_size || !cmp) {
     DEBUG("At least one argument was null or zero");
     return -EINVAL;
   }
 
   size_t s1=0, s2=0, oi=0, eq=0;
+  void *oldval=NULL;
   while (s1<in1count && s2<in2count && oi<outmax) {
     int val = cmp((set1 + s1 * elem_size), (set2 + s2 * elem_size));
-    if (val==0 && !eq) {
-      if (!eq) {
-        /* to make sure that the output array has distinct elements */
+    if (val==0) {
+      DEBUG("Equal");
+      if (!eq || cmp((set1 + s1 * elem_size), oldval)!=0) {
+        /* make sure that the output array has distinct elements */
         memcpy((out + oi++ * elem_size), (set1 + s1 * elem_size), elem_size);
+        /* keep the old value so we can tell if there are repeated elements */
+        oldval = (set2 + s2 * elem_size);
       }
       s1++; s2++;
       eq=1;
     } else if (val < 0) {
+      DEBUG("Copy from set1");
       memcpy((out + oi++ * elem_size), (set1 + s1++ * elem_size), elem_size);
+      oldval = (set1 + s1 * elem_size);
       eq=0;
     } else if (val > 0) {
+      DEBUG("Copy from set2");
       memcpy((out + oi++ * elem_size), (set2 + s2++ * elem_size), elem_size);
+      oldval = (set2 + s2 * elem_size);
       eq=0;
     }
   }
@@ -104,6 +112,53 @@ int set_union(void *set1, void *set2, void *out, size_t in1count, size_t in2coun
   }
   while (s2<in2count && oi<outmax) {
     memcpy((out + oi++ * elem_size), (set2 + s2++ * elem_size), elem_size);
+  }
+  return oi;
+}
+
+/**
+ * Creates the intersection of two sorted arrays. The output array is
+ * guaranteed never to be larger than MIN(\a in1count, \a in2count).
+ *
+ * @param set1      The first set to be used.
+ * @param set2      The second set to be used.
+ * @param out       The output array.
+ * @param in1count  The number of items in \a set1.
+ * @param in2count  The number of items in \a set2.
+ * @param outmax    The maximum number of items in \a out.
+ * @param elem_size The size of an element in the set arrays.
+ * @param cmp       A comparison function that can be used on the array
+ * elements.
+ * @returns A negative error code, or the number of items written to the output
+ * array.
+ */
+int set_intersect(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*)) {
+  if (!set1 || !set2 || !out || !in1count || !in2count || !outmax || !elem_size || !cmp) {
+    DEBUG("At least one argument was null or zero");
+    return -EINVAL;
+  }
+
+  size_t s1=0, s2=0, oi=0, eq=0;
+  void *oldval=NULL;
+  while (s1<in1count && s2<in2count && oi<outmax) {
+    int val = cmp((set1 + s1 * elem_size), (set2 + s2 * elem_size));
+    if (val==0) {
+      DEBUG("Equal");
+      if (!eq || cmp((set1 + s1 * elem_size), oldval)!=0) {
+        /* make sure that the output array has distinct elements */
+        memcpy((out + oi++ * elem_size), (set1 + s1 * elem_size), elem_size);
+        /* keep the old value so we can tell if there are repeated elements */
+        oldval = (set2 + s2 * elem_size);
+      }
+      s1++; s2++;
+      eq=1;
+    } else if (val < 0) {
+      oldval = (set1 + s1++ * elem_size);
+      eq=0;
+    } else if (val > 0) {
+      oldval = (set2 + s2++ * elem_size);
+      eq=0;
+    }
   }
   return oi;
 }
