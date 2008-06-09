@@ -181,7 +181,7 @@ static int insight_getattr(const char *path, struct stat *stbuf)
       DEBUG("Getattr on a subkey indicator directory");
       stbuf->st_mode = S_IFDIR | 0555;
       stbuf->st_nlink = 1;
-      stbuf->st_ino = 2;
+      stbuf->st_ino = hash_path(canon_path, strlen(canon_path));
     } else {
       int subtag=0;
       fileptr tagdata;
@@ -209,7 +209,8 @@ static int insight_getattr(const char *path, struct stat *stbuf)
         stbuf->st_mode = S_IFDIR | 0555;
       }
       stbuf->st_nlink = 1;
-      stbuf->st_ino = -1;
+      /* provide probably unique inodes for directories */
+      stbuf->st_ino = hash_path(canon_path, strlen(canon_path));
     }
   } else {
     DEBUG("Path does not exist\n");
