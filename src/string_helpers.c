@@ -41,7 +41,8 @@
  */
 int strcount(const char *haystack, const char needle) {
   DEBUG("Function entry");
-  char *tmp = strdup(haystack);
+  char *dup = strdup(haystack);
+  char *tmp = dup;
   int count=0;
 
   DEBUG("Counting instances of \"%c\" in \"%s\".", needle, haystack);
@@ -50,6 +51,8 @@ int strcount(const char *haystack, const char needle) {
       count++;
   }
   DEBUG("String has %d instances of %c", count, needle);
+  tmp=NULL;
+  ifree(dup);
   return count;
 }
 

@@ -1730,6 +1730,71 @@ int inode_put_all(fileptr block, fileptr *inodes, int count) {
 }
 
 /**
+ * Fetch all inodes recursively from the given block, following links as
+ * required. The \a block argument may refer to either a data block, an inode
+ * block, a tree block, or the superblock (if zero).
+ *
+ * @param[in]  block  The first block index to read.
+ * @param[out] inodes A pointer which will be filled with an array of inodes.
+ * If NULL, then the function returns the space required.
+ * @param[in]  max    Maximum number of inodes the array can contain.
+ * @returns Zero on success, the number of inodes if \a inodes is NULL, or a
+ * negative error code on failure.
+ */
+int inode_get_all_recurse(fileptr block, fileptr *inodes, int max) {
+  tblock readblock;
+  int curinode=0;
+
+  if (!block) {
+    DEBUG("Starting at superblock");
+    return inode_get_all(block, inodes, max);
+  }
+
+  DEBUG("Starting at block index %lu", block);
+  if (tree_read(block, &readblock)) {
+    PMSG(LOG_ERR, "Problem reading block");
+    return -EIO;
+  }
+
+  switch (readblock.magic) {
+    case MAGIC_DATANODE:
+    case MAGIC_FREEBLOCK:
+    case MAGIC_INODEBLOCK:
+    case MAGIC_TREENODE:
+    default:
+      PMSG(LOG_ERR, "Unknown block magic %08lX");
+      return -EBADF;
+  }
+
+  if (!inodes) {
+    DEBUG("Number of array entries required: %u", datablock.inodecount);
+    return datablock.inodecount;
+  }
+  if (datablock.inodecount > max) {
+    PMSG(LOG_ERR, "Number of inodes (%u) greater than output array size (%d)", datablock.inodecount, max);
+    return -ENOMEM;
+  }
+
+  DEBUG("Copying inodes to user buffer");
+  memcpy(inodes, datablock.inodes, MIN(datablock.inodecount, INODECOUNT)*sizeof(fileptr));
+  curinode += MIN(datablock.inodecount, INODECOUNT);
+
+  fileptr inodeptr;
+  tinode ib;
+  /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
+  for (inodeptr = datablock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {
+    if (tree_read(inodeptr, (tblock*)&ib) || ib.magic!=MAGIC_INODEBLOCK) {
+      PMSG(LOG_ERR, "Problem reading inode block");
+      return -EIO;
+    }
+    memcpy(&inodes[curinode], ib.inodes, ib.inodecount*sizeof(fileptr));
+    curinode += MIN(ib.inodecount, INODE_MAX);
+  }
+
+  return 0;
+}
+
+/**
  * Fetch all inodes from the given block, following links as required. The \a
  * block argument may refer to either a data block or the superblock (if zero).
  *

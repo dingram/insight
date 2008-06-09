@@ -433,6 +433,19 @@ int query_get_subtags(const qelem *query, char *parent, int len) {
  * or if count is zero.
  */
 fileptr *query_to_inodes(const qelem * const query, int * const count, int * const neg) {
+  DEBUG("Function entry");
+  if (!query) {
+    PMSG(LOG_ERR, "Query was null");
+    return NULL;
+  }
+  if (!count) {
+    PMSG(LOG_ERR, "Count was null");
+    return NULL;
+  }
+  if (!neg) {
+    PMSG(LOG_ERR, "Neg was null");
+    return NULL;
+  }
   switch (query->type) {
     case QUERY_IS_ANY:
       /* IS_ANY node, output set is the set of limbo inodes, with internal

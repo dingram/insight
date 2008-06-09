@@ -92,7 +92,6 @@ static struct fuse_opt insight_opts[] = {
   INSIGHTFS_OPT("-r",         readonly,     1),
   INSIGHTFS_OPT("-v",         verbose,      1),
   INSIGHTFS_OPT("-q",         quiet,        1),
-  /* INSIGHTFS_OPT("-c",         use_cache,    1), */
 
   FUSE_OPT_KEY("-V",            KEY_VERSION),
   FUSE_OPT_KEY("--version",     KEY_VERSION),
@@ -260,12 +259,29 @@ static int insight_readdir(const char *path, void *buf,
   DEBUG("Found tag \"%s\"; tree root now %lu", last_tag, tree_root);
 
   DEBUG("Filling directory");
+  if (!filler) {
+    PMSG(LOG_ERR, "Filler function is undefined!");
+    qtree_free(&q, 1);
+    ifree(last_tag);
+    return -EIO;
+  }
+  if (!buf) {
+    PMSG(LOG_ERR, "Destination buffer is undefined!");
+    qtree_free(&q, 1);
+    ifree(last_tag);
+    return -EIO;
+  }
+  DEBUG("Calling filler on dot");
   filler(buf, ".", NULL, 0);
+  DEBUG("Managed .");
   filler(buf, "..", NULL, 0);
+  DEBUG("Managed ..");
 
   int inodecount, neg;
+  DEBUG("Fetching inode list");
   fileptr *inodelist = query_to_inodes(q, &inodecount, &neg);
 
+  DEBUG("query_to_inodes() has returned");
   if (!inodelist) {
     PMSG(LOG_ERR, "Error fetching inode list from query tree");
     qtree_free(&q, 1);
@@ -683,7 +699,7 @@ static int insight_chown(const char *path, uid_t uid, gid_t gid)
 {
   char *canon_path = get_canonical_path(path);
 
-  DEBUG("Change ownership of \"%s\" to %d:%d", path, uid, gid);
+  DEBUG("Change ownership of \"%s\" to %d:%d", canon_path, uid, gid);
 
   struct stat fstat;
 
@@ -709,11 +725,30 @@ static int insight_chown(const char *path, uid_t uid, gid_t gid)
 
 static int insight_truncate(const char *path, off_t size)
 {
-  (void) path;
-  (void) size;
+  char *canon_path = get_canonical_path(path);
 
-  DEBUG("Truncate \"%s\" to %lld bytes", path, size);
-  return -ENOTSUP;
+  DEBUG("Truncate \"%s\" to %lld bytes", canon_path, size);
+
+  struct stat fstat;
+
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1), insight.repository);
+    DEBUG("Truncating real file: %s", fullname);
+    if (truncate(fullname, size)==-1) {
+      PMSG(LOG_ERR, "truncate(\"%s\", %lu) failed: %s", fullname, size, strerror(errno));
+      ifree(fullname);
+      return -errno;
+    } else {
+      ifree(fullname);
+      return 0;
+    }
+  } else if (validate_path(canon_path)) {
+    DEBUG("Cannot change ownership of directories");
+    return -EPERM;
+  } else {
+    DEBUG("Could not find path");
+    return -ENOENT;
+  }
 }
 
 #if FUSE_VERSION >= 26
