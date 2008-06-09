@@ -139,6 +139,7 @@ int     tree_close        (void);
 int     tree_read         (fileptr block, tblock *data);
 int     tree_write        (fileptr block, tblock *data);
 int     tree_grow         (fileptr newsize);
+time_t  tree_get_mtime    ();
 fileptr tree_get_root     ();
 int     tree_get_min      (tnode *node);
 int     tree_sub_get_min  (fileptr root, tnode *node);

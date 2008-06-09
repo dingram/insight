@@ -64,7 +64,10 @@ int strcount(const char *haystack, const char needle) {
 char *strlast(const char *input, const char sep) {
   char *dup = strdup(input);
   char *ret=rindex(dup, sep);
-  if (ret) ret++;
+  if (ret) {
+    ret=strdup(ret+1);
+    ifree(dup);
+  }
   else ret=dup;
   return ret;
 }

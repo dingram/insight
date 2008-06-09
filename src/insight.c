@@ -167,6 +167,9 @@ static int insight_getattr(const char *path, struct stat *stbuf)
     /* steal a default stat structure */
     memcpy(stbuf, &insight.mountstat, sizeof(struct stat));
 
+    /* last modified times are the same as the tree last modified time */
+    stbuf->st_atime = stbuf->st_ctime = stbuf->st_mtime = tree_get_mtime();
+
     /* special case: root */
     if (strcmp(canon_path, "/")==0) {
       DEBUG("Getattr called on root path\n");
@@ -780,28 +783,83 @@ static int insight_utime(const char *path, struct utimbuf *buf)
 
 static int insight_open(const char *path, struct fuse_file_info *fi)
 {
-  (void) fi;
-  DEBUG("Open on path \"%s\"", path);
-  if (strcmp(path, "/insightFS") != 0) {
-    DEBUG("Unknown path\n");
+  char *canon_path = get_canonical_path(path);
+
+  DEBUG("Open on path \"%s\"", canon_path);
+
+  struct stat fstat;
+  char *last = strlast(canon_path, '/');
+
+  DEBUG("Last returned \"%s\"", last);
+
+  if (have_file_by_name(last, &fstat, insight.repository)) {
+    char *fullname = fullname_from_inode(hash_path(last, strlen(last)), insight.repository);
+    int res;
+    DEBUG("Opening real file: %s", fullname);
+    if ((res=open(fullname, fi->flags|O_RDONLY))==-1) {
+      PMSG(LOG_ERR, "open(\"%s\", %d) failed: %s", fullname, fi->flags, strerror(errno));
+      ifree(last);
+      ifree(fullname);
+      return -errno;
+    } else {
+      DEBUG("Open succeeded; closing file");
+      close(res);
+      DEBUG("Closed, freeing last");
+      ifree(last);
+      DEBUG("Freeing fullname");
+      ifree(fullname);
+      DEBUG("Done");
+      return 0;
+    }
+  } else if (validate_path(canon_path)) {
+    PMSG(LOG_ERR, "Cannot open directories like files!");
+    ifree(last);
+    return -EISDIR;
+  } else {
+    DEBUG("Could not find path");
+    ifree(last);
     return -ENOENT;
   }
-
-  DEBUG("Everything OK\n");
-  return -EACCES;
 }
 
 static int insight_read(const char *path, char *buf, size_t size,
             off_t offset, struct fuse_file_info *fi)
 {
-  (void) path;
-  (void) buf;
-  (void) size;
-  (void) offset;
-  (void) fi;
-  DEBUG("Read on path \"%s\"\n", path);
+  char *canon_path = get_canonical_path(path);
 
-  return -EPERM;
+  DEBUG("Read on path \"%s\"", canon_path);
+
+  struct stat fstat;
+  char *last = strlast(canon_path, '/');
+
+  if (have_file_by_name(last, &fstat, insight.repository)) {
+    unsigned long hash = hash_path(last, strlen(last));
+    char *fullname = fullname_from_inode(hash, insight.repository);
+    int fd;
+    DEBUG("Opening real file: %s", fullname);
+    if ((fd=open(fullname, fi->flags|O_RDONLY))==-1) {
+      PMSG(LOG_ERR, "open(\"%s\", %d) failed: %s", fullname, fi->flags, strerror(errno));
+      ifree(fullname);
+      ifree(last);
+      return -errno;
+    } else {
+      int res, tmp_errno=0;
+      res = pread(fd, buf, size, offset);
+      tmp_errno=errno;
+      close(fd);
+      ifree(fullname);
+      ifree(last);
+      return (res==-1)?-tmp_errno:res;
+    }
+  } else if (validate_path(canon_path)) {
+    PMSG(LOG_ERR, "Cannot read directories like files!");
+    ifree(last);
+    return -EISDIR;
+  } else {
+    DEBUG("Could not find path");
+    ifree(last);
+    return -ENOENT;
+  }
 }
 
 static int insight_write(const char *path, const char *buf, size_t size,
@@ -814,7 +872,7 @@ static int insight_write(const char *path, const char *buf, size_t size,
   (void) fi;
   DEBUG("Write on path \"%s\"\n", path);
 
-  return -EPERM;
+  return -EACCES;
 }
 
 #if FUSE_VERSION >= 26
@@ -824,7 +882,7 @@ static int insight_statvfs(const char *path, struct statvfs *stbuf)
   (void) path;
   (void) stbuf;
 
-  DEBUG("Statfs on \"%s\"", path);
+  DEBUG("Statvfs on \"%s\"", path);
   return 0;
 }
 
@@ -845,7 +903,7 @@ static int insight_release(const char *path, struct fuse_file_info *fi)
   (void) path;
   (void) fi;
 
-  DEBUG("Statfs on \"%s\"", path);
+  DEBUG("Release on \"%s\"", path);
   return 0;
 }
 

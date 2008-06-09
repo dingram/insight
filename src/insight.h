@@ -42,7 +42,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
@@ -64,6 +63,7 @@
 #include <utime.h>
 #include <signal.h>
 #include <syslog.h>
+#include <unistd.h>
 
 #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>

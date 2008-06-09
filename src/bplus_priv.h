@@ -84,12 +84,15 @@ static int      tree_cache_flush   (int clear);
 static int      tree_cache_drop    ();
 static tblock * tree_cache_get     (fileptr block);
 static int      tree_cache_put     (fileptr block, tblock *data);
+static inline void _tree_touch();
 #endif
 
 /** Internal storage of file handle for tree file */
 static int tree_fp = -1;
 /** In-memory version of tree superblock */
 static tsblock *tree_sb;
+/** Time of last tree change */
+static time_t last_modified;
 
 #ifdef TREE_CACHE_ENABLED
 /**

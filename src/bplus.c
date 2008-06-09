@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
@@ -232,6 +233,11 @@ int tree_open (char *path) {
       tree_stats = malloc((tree_sb->max_size+1) * sizeof(stats_ent)); /* TODO: check for failure */
       zero_mem(tree_stats, (tree_sb->max_size+1) * sizeof(stats_ent));
 #endif
+      /* tree last modified time */
+      struct stat s;
+      /* XXX: really should not fail */
+      fstat(tree_fp, &s);
+      last_modified = s.st_mtime;
 #ifdef TREE_CACHE_ENABLED
       return tree_cache_init();
 #else
@@ -249,6 +255,7 @@ int tree_open (char *path) {
     zero_mem(tree_stats, (DEFAULT_BLOCKS+1) * sizeof(stats_ent));
     DEBUG("Stats initialised");
 #endif
+    _tree_touch();
     DEBUG("Calling tree_format()");
     result=tree_format();
     if (result) return result;
@@ -463,11 +470,14 @@ int tree_write (fileptr block, tblock *data) {
     PMSG(LOG_ERR, "Failed to write to cache: %s", strerror(errno));
     return ENOMEM;
   } else if (!block_cache) {
+    _tree_touch();
     /* must write if no cache available! */
     return _tree_write(block, data);
   }
+  _tree_touch();
   return 0;
 #else
+  _tree_touch();
   return _tree_write(block, data);
 #endif
 }
@@ -701,6 +711,22 @@ int tree_sub_key_count(fileptr root) {
   } while (node.ptrs[0]);
 
   return node.keycount;
+}
+
+/**
+ * Set the tree last modified time to the current time.
+ */
+static inline void _tree_touch() {
+  last_modified=time(NULL);
+}
+
+/**
+ * Get the tree last modified time.
+ *
+ * @returns The last modified time of the tree, in seconds since the epoch.
+ */
+time_t tree_get_mtime() {
+  return last_modified;
 }
 
 /**
