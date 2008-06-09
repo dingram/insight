@@ -35,6 +35,9 @@
 #include <debug.h>
 #include <string_helpers.h>
 #include <query_engine.h>
+#include <bplus.h>
+#include <path_helpers.h>
+#include <set_ops.h>
 
 
 static inline qelem *_qtree_make_isany() {
@@ -417,4 +420,212 @@ int query_get_subtags(const qelem *query, char *parent, int len) {
   }
 
   return 0;
+}
+
+/**
+ * Get inode list from query tree. The returned list is allocated with malloc()
+ * and should be freed with free().
+ *
+ * @param query The root of the query tree to calculate the inode list for.
+ * @param count The number of inodes in the returned list.
+ * @param neg   True if the query results should be negated.
+ * @returns The list of inodes available given the query tree, or NULL on error
+ * or if count is zero.
+ */
+fileptr *query_to_inodes(const qelem * const query, int * const count, int * const neg) {
+  switch (query->type) {
+    case QUERY_IS_ANY:
+      /* IS_ANY node, output set is the set of limbo inodes, with internal
+       * negation flag set to false
+       */
+      DEBUG("IS_ANY: creating list of limbo inodes, negation 0");
+      *neg=0;
+      *count = inode_get_all(0, NULL, 0);
+      if (*count>0) {
+        fileptr *inodes = calloc(*count, sizeof(fileptr));
+        inode_get_all(0, inodes, *count);
+        return inodes;
+      } else if (*count==0) {
+        /* empty return list to avoid error; must still be freed though */
+        return calloc(1, sizeof(fileptr));
+      } else if (*count<0) {
+        DEBUG("Error calling inode_get_all(): %s", strerror(-*count));
+        return NULL;
+      }
+      break;
+
+    case QUERY_IS:
+      /* IS node, the output set is the recursive union of the inodes belonging
+       * to that tag and its subtags, with internal negation flag set to false
+       */
+      {
+        fileptr dblock = get_tag(query->tag);
+
+        /* TODO: get all subkeys */
+
+        DEBUG("IS: creating list of inodes from block %lu, negation 0", dblock);
+        *neg=0;
+        *count = inode_get_all(dblock, NULL, 0);
+        DEBUG("IS: %d inodes in block %lu", *count, dblock);
+        if (*count>0) {
+          fileptr *inodes = calloc(*count, sizeof(fileptr));
+          inode_get_all(dblock, inodes, *count);
+          return inodes;
+        } else if (*count==0) {
+          /* empty return list to avoid error; must still be freed though */
+          return calloc(1, sizeof(fileptr));
+        } else if (*count<0) {
+          DEBUG("Error calling inode_get_all(): %s", strerror(-*count));
+          return NULL;
+        }
+      }
+      break;
+
+    case QUERY_IS_NOSUB:
+      /* IS_NOSUB node, the output set is the set of inodes belonging tag, with
+       * internal negation flag set to false
+       */
+      {
+        fileptr dblock = get_tag(query->tag);
+
+        DEBUG("IS_NOSUB: creating list of inodes from block %lu, negation 0", dblock);
+        *neg=0;
+        *count = inode_get_all(dblock, NULL, 0);
+        DEBUG("IS_NOSUB: %d inodes in block %lu", *count, dblock);
+        if (*count>0) {
+          fileptr *inodes = calloc(*count, sizeof(fileptr));
+          inode_get_all(dblock, inodes, *count);
+          return inodes;
+        } else if (*count==0) {
+          /* empty return list to avoid error; must still be freed though */
+          return calloc(1, sizeof(fileptr));
+        } else if (*count<0) {
+          DEBUG("Error calling inode_get_all(): %s", strerror(-*count));
+          return NULL;
+        }
+      }
+      break;
+
+    case QUERY_IS_INODE:
+      /* IS_INODE node, the output set contains a single element: the inode. */
+      {
+        fileptr *ret = calloc(1, sizeof(fileptr));
+        DEBUG("IS_INODE: single inode 0x%08lx, negation 0", query->inode);
+        *count=1;
+        *neg=0;
+        *ret=query->inode;
+        return ret;
+      }
+      break;
+
+    case QUERY_NOT:
+      if (query->tag) {
+        /* IS_NOT node with a tag, the output set is the same as for an IS
+         * node, with an internal negation flag set to true */
+        PMSG(LOG_ERR, "Unhandled type of NOT query! Tag is available.");
+        return NULL;
+      } else if (query->next[0]) {
+        /* IS_NOT node with a subquery, the output set is identical to the
+         * subquery resultset, with an internal negation flag inverted */
+        fileptr *res = query_to_inodes(query, count, neg);
+        *neg = !*neg;
+        return res;
+      } else {
+        PMSG(LOG_ERR, "Unknown type of NOT query! Both tag and next[0] are null.");
+        return NULL;
+      }
+      break;
+
+    case QUERY_AND:
+      /* AND node output depends on the negation flags of its subqueries:
+       *  * Both false: output is the set intersection of its subqueries, with
+       *  negation flag clear
+       *  * Both true: output is union of subqueries, with negation flag set
+       *  * Otherwise: output is set difference, with the negation-true set
+       *  removed from the negation-false set, and the negation flag cleared
+       */
+      {
+        DEBUG("AND: Conjunction of two query subtrees");
+        int count1=0, count2=0, neg1=0, neg2=0;
+        fileptr *res1 = query_to_inodes(query->next[0], &count1, &neg1);
+        if (!res1) {
+          DEBUG("Error in left branch");
+          return NULL;
+        }
+        if (!count1 && !neg1) {
+          /* short-circuit query evaluation */
+          DEBUG("Short-circuit: first branch yielded no results");
+          *count=0;
+          *neg=neg1;
+          return res1;
+        }
+        fileptr *res2 = query_to_inodes(query->next[1], &count2, &neg2);
+        if (!res2) {
+          DEBUG("Error in left branch");
+          ifree(res1);
+          return NULL;
+        }
+        if (!count2 && !neg2) {
+          /* no need to perform set operations */
+          DEBUG("Short-circuit: second branch yielded no results");
+          *count=0;
+          *neg=neg2;
+          ifree(res1);
+          return res2;
+        }
+        /* both subtrees returned results */
+        if (!neg1 && !neg2) {
+          fileptr *res = calloc(MIN(count1, count2), sizeof(fileptr));
+          if (!res) {
+            PMSG(LOG_ERR, "Failed to allocate memory for return array");
+            ifree(res1);
+            ifree(res2);
+            return NULL;
+          }
+          /* output is the intersection of subqueries, with negation flag clear */
+          *neg=0;
+          *count=set_intersect(res1, res2, res, count1, count2, MIN(count1, count2), sizeof(fileptr), inodecmp);
+          if (*count < 0) {
+            PMSG(LOG_ERR, "Error in set intersection operation.");
+            ifree(res1);
+            ifree(res2);
+            ifree(res);
+            return NULL;
+          } else {
+            DEBUG("Set intersection succeeded; %d results", *count);
+            ifree(res1);
+            ifree(res2);
+            return res;
+          }
+        /* } else if (neg1 && neg2) { */
+          /* output is union of subqueries, with negation flag set */
+        /* } else { */
+          /* output is set difference, with the negation-true set removed from
+           * the negation-false set, and the negation flag cleared */
+        } else {
+          PMSG(LOG_ERR, "Unhandled case in AND");
+          ifree(res1);
+          ifree(res2);
+          return NULL;
+        }
+      }
+      break;
+
+    case QUERY_OR:
+      /* OR node output depends on the negation flags of its subqueries:
+       *  * Both false: output is union of subquery results, with negation flag
+       *  clear
+       *  * Both true: output is intersection of subquery results, with
+       *  negation flag set
+       *  * Otherwise: output is ???
+       */
+      PMSG(LOG_ERR, "Cannot handle OR queries yet!");
+      return NULL;
+      break;
+
+    default:
+      PMSG(LOG_ERR, "Unknown query tree element type %d!", query->type);
+      return NULL;
+  }
+  return NULL;
 }

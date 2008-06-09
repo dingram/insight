@@ -245,13 +245,11 @@ static int insight_readdir(const char *path, void *buf,
   (void)query_get_subtags(q, last_tag, 255);
   DEBUG("Subtag parent: \"%s\"", last_tag);
 
-  DEBUG("Freeing query tree...");
-  qtree_free(&q, 1);
-
   fileptr tree_root=tree_get_root();
 
   if (*last_tag && (tree_root=get_tag(last_tag))==0) {
     DEBUG("Tag \"%s\" not found", last_tag);
+    qtree_free(&q, 1);
     ifree(last_tag);
     return -ENOENT;
   }
@@ -261,43 +259,32 @@ static int insight_readdir(const char *path, void *buf,
   filler(buf, ".", NULL, 0);
   filler(buf, "..", NULL, 0);
 
-  /* fill with files - no query happening here yet though */
-  if (!*last_tag) {
-    fileptr *inodearray;
-    int inodecount;
+  int inodecount, neg;
+  fileptr *inodelist = query_to_inodes(q, &inodecount, &neg);
 
-    if ((inodecount = inode_get_all(0, NULL, 0)) < 0) {
-      PMSG(LOG_ERR, "IO error in getting inode list");
-      ifree(last_tag);
-      return -EIO;
-    }
+  if (!inodelist) {
+    PMSG(LOG_ERR, "Error fetching inode list from query tree");
+    qtree_free(&q, 1);
+    ifree(last_tag);
+    return -EIO;
+  }
+  DEBUG("%d inodes to consider", inodecount);
 
-    DEBUG("%d inodes to consider", inodecount);
-
-    if (inodecount>0) {
-      inodearray = calloc(inodecount, sizeof(fileptr));
-      if (!inodearray) {
-        PMSG(LOG_ERR, "Failed to allocate memory for inode array of %d elements", inodecount);
-        return -ENOMEM;
-      }
-      inode_get_all(0, inodearray, 0);
-
-      char *str;
-
-      for (i=0; i<inodecount; i++) {
-        str = basename_from_inode(inodearray[i], insight.repository);
-        if (str) {
-          DEBUG("Adding filename \"%s\" to listing", str);
-          filler(buf, str, NULL, 0);
-        } else {
-          FMSG(LOG_ERR, "Error getting filename for inode %08lX", inodearray[i]);
-        }
-      }
-
-      DEBUG("Freeing inode array");
-      ifree(inodearray);
+  for (i=0; i<inodecount; i++) {
+    char *str = basename_from_inode(inodelist[i], insight.repository);
+    if (str) {
+      DEBUG("Adding filename \"%s\" to listing", str);
+      filler(buf, str, NULL, 0);
+    } else {
+      FMSG(LOG_ERR, "Error getting filename for inode %08lX", inodelist[i]);
     }
   }
+
+  DEBUG("Freeing inode array");
+  ifree(inodelist);
+
+  DEBUG("Freeing query tree...");
+  qtree_free(&q, 1);
 
   /* And now for directories */
 
@@ -319,17 +306,21 @@ static int insight_readdir(const char *path, void *buf,
   DEBUG("Should we add subtag dir?");
   /* add special directory containing subkeys of this key */
   if (strcmp(path, "/") != 0 && !*last_tag) {
+    DEBUG("Getting last fragment");
     char *lastbit = strlast(canon_path, '/');
     tnode n;
     /* but only if it actually has subkeys */
+    DEBUG("Getting tag for \"%s\"", lastbit);
     tree_root=get_tag(lastbit);
 
+    DEBUG("Calling tree_sub_get_min(%lu)", tree_root);
     if (tree_sub_get_min(tree_root, &n)) {
       PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed\n");
       ifree(last_tag);
       return -EIO;
     }
 
+    DEBUG("Checking magic");
     if (n.magic==MAGIC_TREENODE) {
       DEBUG("Adding subkey indicator directory");
       filler(buf, INSIGHT_SUBKEY_IND, NULL, 0);
@@ -658,21 +649,58 @@ static int insight_link(const char *from, const char *to)
 
 static int insight_chmod(const char *path, mode_t mode)
 {
-  (void) path;
-  (void) mode;
+  char *canon_path = get_canonical_path(path);
 
-  DEBUG("Change mode of \"%s\" to %05o", path, mode & 07777);
-  return -ENOTSUP;
+  DEBUG("Change mode of \"%s\" to %05o", canon_path, mode & 07777);
+
+  struct stat fstat;
+
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1), insight.repository);
+    DEBUG("Changing mode of real file: %s", fullname);
+    if (chmod(fullname, mode)==-1) {
+      PMSG(LOG_ERR, "chmod(\"%s\", %05o) failed: %s", fullname, mode, strerror(errno));
+      ifree(fullname);
+      return -errno;
+    } else {
+      ifree(fullname);
+      return 0;
+    }
+  } else if (validate_path(canon_path)) {
+    DEBUG("Cannot change mode of directories");
+    return -EPERM;
+  } else {
+    DEBUG("Could not find path");
+    return -ENOENT;
+  }
 }
 
 static int insight_chown(const char *path, uid_t uid, gid_t gid)
 {
-  (void) path;
-  (void) uid;
-  (void) gid;
+  char *canon_path = get_canonical_path(path);
 
   DEBUG("Change ownership of \"%s\" to %d:%d", path, uid, gid);
-  return -ENOTSUP;
+
+  struct stat fstat;
+
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1), insight.repository);
+    DEBUG("Change ownership of real file: %s", fullname);
+    if (chown(fullname, uid, gid)==-1) {
+      PMSG(LOG_ERR, "chown(\"%s\", %u, %u) failed: %s", fullname, uid, gid, strerror(errno));
+      ifree(fullname);
+      return -errno;
+    } else {
+      ifree(fullname);
+      return 0;
+    }
+  } else if (validate_path(canon_path)) {
+    DEBUG("Cannot change ownership of directories");
+    return -EPERM;
+  } else {
+    DEBUG("Could not find path");
+    return -ENOENT;
+  }
 }
 
 static int insight_truncate(const char *path, off_t size)
@@ -688,22 +716,63 @@ static int insight_truncate(const char *path, off_t size)
 
 static int insight_utimens(const char *path, const struct timespec tv[2])
 {
-  (void) path;
-  (void) tv;
+  char *canon_path = get_canonical_path(path);
 
   DEBUG("Changing times of \"%s\"", path);
-  return -ENOTSUP;
+
+  struct stat fstat;
+
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1), insight.repository);
+    struct timeval tvv;
+    DEBUG("Change times of real file: %s", fullname);
+    tvv.tv_sec = tv->tv_sec;
+    tvv.tv_usec = tv->tv_nsec / 1000;
+    if (utimes(fullname, &tvv)==-1) {
+      PMSG(LOG_ERR, "utimes(\"%s\", tv) failed: %s", fullname, strerror(errno));
+      ifree(fullname);
+      return -errno;
+    } else {
+      ifree(fullname);
+      return 0;
+    }
+  } else if (validate_path(canon_path)) {
+    DEBUG("Cannot change times of directories");
+    return -EPERM;
+  } else {
+    DEBUG("Could not find path");
+    return -ENOENT;
+  }
 }
 
 #else
 
 static int insight_utime(const char *path, struct utimbuf *buf)
 {
-  (void) path;
-  (void) buf;
+  char *canon_path = get_canonical_path(path);
 
   DEBUG("Changing times of \"%s\"", path);
-  return -ENOTSUP;
+
+  struct stat fstat;
+
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1), insight.repository);
+    DEBUG("Change times of real file: %s", fullname);
+    if (utime(fullname, buf)==-1) {
+      PMSG(LOG_ERR, "utime(\"%s\", tv) failed: %s", fullname, strerror(errno));
+      ifree(fullname);
+      return -errno;
+    } else {
+      ifree(fullname);
+      return 0;
+    }
+  } else if (validate_path(canon_path)) {
+    DEBUG("Cannot change times of directories");
+    return -EPERM;
+  } else {
+    DEBUG("Could not find path");
+    return -ENOENT;
+  }
 }
 
 #endif

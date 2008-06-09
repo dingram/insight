@@ -60,6 +60,7 @@
 # endif
 #endif
 #include <stddef.h>
+#include <sys/time.h>
 #include <utime.h>
 #include <signal.h>
 #include <syslog.h>

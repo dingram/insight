@@ -296,6 +296,21 @@ int have_file_by_name(const char *path, struct stat *fstat, const char *repos_ba
 }
 
 char *basename_from_inode(const fileptr inode, const char *repos_base) {
+  char *linkres = fullname_from_inode(inode, repos_base);
+  if (!linkres) {
+    PMSG(LOG_ERR, "Failed to get fullname");
+    return NULL;
+  }
+
+  char *answer = strlast(linkres, '/');
+
+  DEBUG("Freeing linkres");
+  ifree(linkres);
+
+  return answer;
+}
+
+char *fullname_from_inode(const fileptr inode, const char *repos_base) {
   char hash[9];
   snprintf(hash, 9, "%08lX", inode);
   DEBUG("Input hash: %s", hash);
@@ -322,12 +337,8 @@ char *basename_from_inode(const fileptr inode, const char *repos_base) {
     return NULL;
   }
 
-  char *answer = strlast(linkres, '/');
-
   DEBUG("Freeing filepath");
   ifree(filepath);
-  DEBUG("Freeing linkres");
-  ifree(linkres);
 
-  return answer;
+  return linkres;
 }

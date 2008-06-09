@@ -38,6 +38,7 @@
 enum qelem_type {
   QUERY_IS_ANY,   /**< Matches any tag */
   QUERY_IS,       /**< Matches a specific tag */
+  QUERY_IS_NOSUB, /**< Matches a specific tag but NOT subtags */
   QUERY_IS_INODE, /**< Matches a specific tag */
   QUERY_NOT,      /**< Matches if not a specific tag or subquery */
   QUERY_AND,      /**< Matches if both subqueries match */
@@ -59,4 +60,5 @@ void qtree_free(qelem **root, int free_tags);
 int qtree_consistent(qelem *root, int strict);
 qelem *path_to_query(const char *path);
 int query_get_subtags(const qelem *query, char *parent, int len);
+fileptr *query_to_inodes(const qelem * const query, int * const count, int * const neg);
 #endif
