@@ -960,8 +960,20 @@ static int insight_opt_proc(void *data, const char *arg, int key, struct fuse_ar
 
 static void insight_process_args(struct fuse_args *args) {
   fuse_opt_add_arg(args, "-ofsname=insight");       /* filesystem name */
-  fuse_opt_add_arg(args, "-ouse_ino,readdir_ino");  /* honour the inode fields in getattr() and fill_dir() */
+  fuse_opt_add_arg(args, "-ouse_ino");              /* honour the inode fields in getattr() */
+  fuse_opt_add_arg(args, "-oreaddir_ino");          /* honour the inode fields in readdir() */
   fuse_opt_add_arg(args, "-oallow_other");          /* allow non-root users to access the file system */
+
+  /* XXX: force single-thread mode as no locking (yet!) */
+  insight.singlethread = 1;
+  if (!insight.quiet)
+    fprintf(stderr, "%s: Forcing single-thread mode\n", insight.progname);
+
+  /* XXX: force foreground mode while debugging */
+  /* TODO: remove this when done */
+  insight.foreground = 1;
+  if (!insight.quiet)
+    fprintf(stderr, "%s: Forcing foreground mode\n", insight.progname);
 
   if (insight.singlethread) {
     if (!insight.quiet)
@@ -1228,12 +1240,14 @@ int main(int argc, char *argv[]) {
     exit(2);
   }
 
+  /*
   FMSG(LOG_DEBUG, "Fuse options:");
   int fargc = args.argc;
   while (fargc) {
     FMSG(LOG_DEBUG, "%.2d: %s", fargc, args.argv[fargc]);
     fargc--;
   }
+  */
 
 #if FUSE_VERSION <= 25
   res = fuse_main(args.argc, args.argv, &insight_oper);
