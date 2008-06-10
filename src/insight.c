@@ -145,13 +145,6 @@ static int usage_printed = 0;
 
 static int insight_getattr(const char *path, struct stat *stbuf)
 {
-  char *canon_path = get_canonical_path(path);
-  if (errno) {
-    DEBUG("Error in get_canonical_path.");
-    return -ENOENT;
-  }
-
-#if 0
   DEBUG("Getattr called on path \"%s\"", path);
 
   DEBUG("Generating query tree");
@@ -165,12 +158,9 @@ static int insight_getattr(const char *path, struct stat *stbuf)
     }
     return -errno;
   }
-#endif
 
   struct stat fstat;
-#if 0
   char *canon_path = get_canonical_path(path);
-#endif
   char *last = strlast(canon_path+1, '/');
 
   DEBUG("Getattr called on path \"%s\"", canon_path);

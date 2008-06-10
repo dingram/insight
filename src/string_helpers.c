@@ -43,7 +43,6 @@
  * @returns The number of times the character appears within the string.
  */
 int strcount(const char *haystack, const char needle) {
-  DEBUG("Function entry");
   char *dup = strdup(haystack);
   char *tmp = dup;
   int count=0;
@@ -114,25 +113,14 @@ int strsplitmap(const char *input, const char sep, int (*func)(const char *, uns
     return ret;
   }
 
-  {
-    int i=0;
-    for (i=0; i<strlen(dup); i++)
-      printf("%02x ", dup[i]);
-    printf("\n");
-  }
+  char *saveptr;
 
   while (1) {
-    char *tmptok = NULL;
-    tmptok = strtok(i++?NULL:dup, sepstr);
-    if (!tmptok) {
+    char *tmptok;
+    tmptok = strtok_r(i++?NULL:dup, sepstr, &saveptr);
+    if (!tmptok || !*tmptok) {
       DEBUG("Done");
       break;
-    }
-    {
-      int i=0;
-      for (i=0; i<strlen(tmptok); i++)
-        printf("%02x ", tmptok[i]);
-      printf("\n");
     }
     DEBUG("Dealing with token[%d] \"%s\"", i, tmptok);
     ret = func(tmptok, data);
