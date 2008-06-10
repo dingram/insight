@@ -29,6 +29,9 @@
  */
 
 #include <insight.h>
+#if defined(_DEBUG_STRING) && !defined(_DEBUG)
+#define _DEBUG
+#endif
 #include <debug.h>
 #include <string_helpers.h>
 
@@ -103,6 +106,21 @@ int strsplitmap(const char *input, const char sep, int (*func)(const char *, uns
   }
   sepstr[0]=sep;
 
+  if (!strcount(input, sep)) {
+    DEBUG("Dealing with entire string (\"%s\")", input);
+    ret = func(input, data);
+    DEBUG("User function returned %d", ret);
+    if (ret>0) ret=0;
+    return ret;
+  }
+
+  {
+    int i=0;
+    for (i=0; i<strlen(dup); i++)
+      printf("%02x ", dup[i]);
+    printf("\n");
+  }
+
   while (1) {
     char *tmptok = NULL;
     tmptok = strtok(i++?NULL:dup, sepstr);
@@ -110,11 +128,17 @@ int strsplitmap(const char *input, const char sep, int (*func)(const char *, uns
       DEBUG("Done");
       break;
     }
+    {
+      int i=0;
+      for (i=0; i<strlen(tmptok); i++)
+        printf("%02x ", tmptok[i]);
+      printf("\n");
+    }
     DEBUG("Dealing with token[%d] \"%s\"", i, tmptok);
     ret = func(tmptok, data);
     DEBUG("User function returned %d", ret);
     if (ret) {
-      if (ret==1) ret=0;
+      if (ret>0) ret=0;
       break;
     }
   }

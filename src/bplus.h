@@ -129,6 +129,10 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
  * subkeys field is the address of the synonym target (another data block) */
 #define DATA_FLAGS_SYNONYM 0x01
 
+/** If a data node has this flag, it should only list the inodes that directly
+ * belong to it and NOT recurse.  */
+#define DATA_FLAGS_NOSUB 0x02
+
 
 /*****************************************************************************
  * FUNCTION PROTOTYPES
@@ -155,26 +159,28 @@ fileptr tree_insert       (tkey key, tdata *data);
 fileptr tree_sub_insert   (fileptr node, tkey key, tdata *data);
 int     tree_read_sb      (tsblock *super);
 int     tree_write_sb     (tsblock *super);
+int     tree_map_keys     (const fileptr root, int (*func)(const char *, const fileptr, void *), void *data);
 
 int inode_free_chain(fileptr block);
 int inode_insert(fileptr block, fileptr inode);
 int inode_put_all(fileptr block, fileptr *inodes, int count);
 int inode_get_all(fileptr block, fileptr *inodes, int max);
+fileptr *inode_get_all_recurse(fileptr block, int *count);
 
 #ifndef MAX
-#define MAX(a,b)      ((a) > (b) ? (a) : (b))
+#define MAX(a,b)      ((a)>(b)?(a):(b))
 #endif
 
 #ifndef MIN
-#define MIN(a,b)      ((a) < (b) ? (a) : (b))
+#define MIN(a,b)      ((a)<(b)?(a):(b))
 #endif
 
 #ifndef MAX3
-#define MAX3(a,b,c)   (MAX(a, MAX(b, c)))
+#define MAX3(a,b,c)   (MAX(a,MAX(b,c)))
 #endif
 
 #ifndef MIN3
-#define MIN3(a,b,c)   (MIN(a, MIN(b, c)))
+#define MIN3(a,b,c)   (MIN(a,MIN(b,c)))
 #endif
 
 #endif /* #ifndef __BPLUS_H */

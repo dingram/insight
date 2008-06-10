@@ -29,8 +29,11 @@
  */
 
 #include <insight.h>
+#if defined(_DEBUG_SETOPS) && !defined(_DEBUG)
+#define _DEBUG
+#endif
 #include <debug.h>
-#include "set_ops.h"
+#include <set_ops.h>
 #include <bplus.h>
 
 
@@ -76,14 +79,24 @@ int pstrcmp(const void *p1, const void *p2) {
  * array.
  */
 int set_union(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*)) {
-  if (!set1 || !set2 || !out || !in1count || !in2count || !outmax || !elem_size || !cmp) {
+  DEBUG("Function entry");
+  DEBUG("set_union(set1: %p, set2: %p, out: %p, in1count: %lu, in2count: %lu, outmax: %lu, elem_size: %lu, cmp: %p)", set1, set2, out, in1count, in2count, outmax, elem_size, cmp);
+  if (!set1 || !set2 || !out || (in1count && in2count && !outmax) || !elem_size || !cmp) {
     DEBUG("At least one argument was null or zero");
     return -EINVAL;
   }
 
+  DEBUG("Checking in1[%lu] and in2[%lu]", in1count, in2count);
+  if (!in1count && !in2count) {
+    DEBUG("No elements in both input arrays means no union possible");
+    return 0;
+  }
+
   size_t s1=0, s2=0, oi=0, eq=0;
   void *oldval=NULL;
+  DEBUG("While condition");
   while (s1<in1count && s2<in2count && oi<outmax) {
+    DEBUG("Inside while loop");
     int val = cmp((set1 + s1 * elem_size), (set2 + s2 * elem_size));
     if (val==0) {
       DEBUG("Equal");
@@ -107,10 +120,14 @@ int set_union(void *set1, void *set2, void *out, size_t in1count, size_t in2coun
       eq=0;
     }
   }
+  DEBUG("Copying from set1?");
   while (s1<in1count && oi<outmax) {
+    DEBUG("Copying elem %lu from set1", s1);
     memcpy((out + oi++ * elem_size), (set1 + s1++ * elem_size), elem_size);
   }
+  DEBUG("Copying from set2?");
   while (s2<in2count && oi<outmax) {
+    DEBUG("Copying elem %lu from set2", s2);
     memcpy((out + oi++ * elem_size), (set2 + s2++ * elem_size), elem_size);
   }
   return oi;
@@ -133,9 +150,14 @@ int set_union(void *set1, void *set2, void *out, size_t in1count, size_t in2coun
  * array.
  */
 int set_intersect(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*)) {
-  if (!set1 || !set2 || !out || !in1count || !in2count || !outmax || !elem_size || !cmp) {
+  if (!set1 || !set2 || !out || !outmax || !elem_size || !cmp) {
     DEBUG("At least one argument was null or zero");
     return -EINVAL;
+  }
+
+  if (!in1count || !in2count) {
+    DEBUG("No elements in an input array means no intersection possible");
+    return 0;
   }
 
   size_t s1=0, s2=0, oi=0, eq=0;

@@ -41,10 +41,11 @@ fileptr get_last_tag(const char *tagname);
 int validate_path(const char *path);
 int checkdir(const char *path);
 int check_mkdir(const char *path);
-char *gen_repos_path(const char *hash, int create, const char *repos_base);
-int have_file_by_name(const char *path, struct stat *stat, const char *repos_base);
-int have_file_by_hash(const char *hash, struct stat *stat, const char *repos_base);
-char *basename_from_inode(const fileptr inode, const char *repos_base);
-char *fullname_from_inode(const fileptr inode, const char *repos_base);
+char *gen_repos_path(const char *hash, int create);
+int have_file_by_name(const char *path, struct stat *stat);
+int have_file_by_hash(const unsigned long hash, struct stat *stat);
+int have_file_by_shash(const char *hash, struct stat *stat);
+char *basename_from_inode(const fileptr inode);
+char *fullname_from_inode(const fileptr inode);
 
 #endif

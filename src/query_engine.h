@@ -60,5 +60,6 @@ void qtree_free(qelem **root, int free_tags);
 int qtree_consistent(qelem *root, int strict);
 qelem *path_to_query(const char *path);
 int query_get_subtags(const qelem *query, char *parent, int len);
+int query_inode_count(const qelem * const query);
 fileptr *query_to_inodes(const qelem * const query, int * const count, int * const neg);
 #endif

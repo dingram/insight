@@ -250,16 +250,16 @@ int check_mkdir(const char *path) {
   return 0;
 }
 
-char *gen_repos_path(const char *hash, int create, const char *repos_base) {
+char *gen_repos_path(const char *hash, int create) {
   char *finaldest;
   int i;
 
-  finaldest = calloc(strlen(repos_base)+strlen("/01/23/45/01234567")+1, sizeof(char));
+  finaldest = calloc(strlen(insight.repository)+strlen("/01/23/45/01234567")+1, sizeof(char));
   if (!finaldest) {
     PMSG(LOG_ERR, "Failed to allocate memory");
     return NULL;
   }
-  strcpy(finaldest, repos_base);
+  strcpy(finaldest, insight.repository);
   /* finaldest guaranteed to exist so far */
 
   for (i=0; i<6; i+=2) {
@@ -281,22 +281,26 @@ char *gen_repos_path(const char *hash, int create, const char *repos_base) {
   return finaldest;
 }
 
-int have_file_by_hash(const char *hash, struct stat *fstat, const char *repos_base) {
-  char *filepath = gen_repos_path(hash, 0, repos_base);
+int have_file_by_shash(const char *hash, struct stat *fstat) {
+  char *filepath = gen_repos_path(hash, 0);
   if (!filepath) return 0;
-  return !((stat(filepath, fstat) == -1) && (errno == ENOENT));
+  struct stat s;
+
+  return !((stat(filepath, fstat?fstat:&s) == -1) && (errno == ENOENT));
 }
 
-int have_file_by_name(const char *path, struct stat *fstat, const char *repos_base) {
-  char hash[9];
-  DEBUG("Input path: %s", path);
-  snprintf(hash, 9, "%08lX", hash_path(path, strlen(path)));
-  DEBUG("Path hash: %s", hash);
-  return have_file_by_hash(hash, fstat, repos_base);
+int have_file_by_hash(const unsigned long hash, struct stat *fstat) {
+  char s_hash[9];
+  snprintf(s_hash, 9, "%08lX", hash);
+  return have_file_by_shash(s_hash, fstat);
 }
 
-char *basename_from_inode(const fileptr inode, const char *repos_base) {
-  char *linkres = fullname_from_inode(inode, repos_base);
+int have_file_by_name(const char *path, struct stat *fstat) {
+  return have_file_by_hash(hash_path(path, strlen(path)), fstat);
+}
+
+char *basename_from_inode(const fileptr inode) {
+  char *linkres = fullname_from_inode(inode);
   if (!linkres) {
     PMSG(LOG_ERR, "Failed to get fullname");
     return NULL;
@@ -310,11 +314,11 @@ char *basename_from_inode(const fileptr inode, const char *repos_base) {
   return answer;
 }
 
-char *fullname_from_inode(const fileptr inode, const char *repos_base) {
+char *fullname_from_inode(const fileptr inode) {
   char hash[9];
   snprintf(hash, 9, "%08lX", inode);
   DEBUG("Input hash: %s", hash);
-  char *filepath = gen_repos_path(hash, 0, repos_base);
+  char *filepath = gen_repos_path(hash, 0);
   DEBUG("Repository path: %s", filepath);
   if (!filepath) {
     PMSG(LOG_ERR, "Inode %08lX has vanished from repository", inode);

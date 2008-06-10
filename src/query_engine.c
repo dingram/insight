@@ -118,53 +118,96 @@ static inline qelem *_qtree_make_or(const qelem *node1, const qelem *node2) {
   return node;
 }
 
+/**
+ * Traverse query tree to find a node of the given type.
+ *
+ * @param root The root of the tree to traverse.
+ * @param type The type of node to find.
+ * @returns Non-zero if the node type was found, or zero if not (or root was
+ * NULL).
+ */
+static int _qtree_contains(const qelem *root, const unsigned int type) {
+  if (!root) {
+    return 0;
+  }
+  if (root->type == type) {
+    return 1;
+  }
+
+  switch (root->type) {
+    case QUERY_IS_ANY:
+    case QUERY_IS:
+    case QUERY_IS_INODE:
+      return 0;
+      break;
+
+    case QUERY_NOT:
+      if (root->tag) {
+        return 0;
+      } else {
+        return _qtree_contains(root->next[0], type);
+      }
+      break;
+
+    case QUERY_AND:
+    case QUERY_OR:
+      return _qtree_contains(root->next[0], type) || _qtree_contains(root->next[1], type);
+      break;
+
+    default:
+      PMSG(LOG_ERR, "Unrecognised query tree element type %d", root->type);
+      return 0;
+      break;
+  }
+}
+
 static void _qtree_dump(const qelem *node, int indent) {
   char *spc=calloc(indent*2+1, sizeof(char));
   memset(spc, ' ', indent*2);
 
   if (!node) {
-    printf("%s[NULL]\n", spc);
+    DEBUG("%s[NULL]", spc);
     ifree(spc);
     return;
   }
 
   switch (node->type) {
     case QUERY_IS_ANY:
-      printf("%sIS_ANY\n", spc);
+      DEBUG("%sIS_ANY", spc);
       break;
 
     case QUERY_IS:
-      printf("%sIS: %s\n", spc, node->tag);
+      DEBUG("%sIS: %s", spc, node->tag);
       break;
 
     case QUERY_IS_INODE:
-      printf("%sIS_INODE: %lu\n", spc, node->inode);
+      DEBUG("%sIS_INODE: %08lX", spc, node->inode);
       break;
 
     case QUERY_NOT:
       if (node->tag) {
-        printf("%sNOT: %s\n", spc, node->tag);
+        DEBUG("%sNOT: %s", spc, node->tag);
       } else {
-        printf("%sNOT\n", spc);
+        DEBUG("%sNOT", spc);
         _qtree_dump(node->next[0], indent+1);
       }
       break;
 
     case QUERY_AND:
-      printf("%sAND\n", spc);
+      DEBUG("%sAND", spc);
       _qtree_dump(node->next[0], indent+1);
       _qtree_dump(node->next[1], indent+1);
       break;
 
     case QUERY_OR:
-      printf("%sOR\n", spc);
+      DEBUG("%sOR", spc);
       _qtree_dump(node->next[0], indent+1);
       _qtree_dump(node->next[1], indent+1);
       break;
 
     default:
       PMSG(LOG_ERR, "Unrecognised query tree element type %d", node->type);
-      printf("%sUNKNOWN: %d\n", spc, node->type);
+      DEBUG("%sUNKNOWN: %d", spc, node->type);
       break;
   }
   ifree(spc);
@@ -262,11 +305,24 @@ int qtree_consistent(qelem *root, int strict) {
  * @return Always zero.
  */
 static int _path_to_query_proc(const char *str, unsigned long data) {
+  DEBUG("str: \"%s\"", str);
   qelem **qroot=(qelem**)data;
-  if (!*qroot) {
+  int is_tag = get_tag(str);
+  unsigned long path_hash = hash_path(str, strlen(str));
+  int is_file = have_file_by_hash(path_hash, NULL);
+
+  if (!is_tag && !is_file) {
+    DEBUG("Tag \"%s\" does not exist");
+    return -ENOENT;
+  }
+  if (is_tag && !*qroot) {
     *qroot=_qtree_make_is(str);
-  } else {
+  } else if (is_file && !*qroot) {
+    *qroot=_qtree_make_is_inode(path_hash);
+  } else if (is_tag && *qroot) {
     *qroot=_qtree_make_and(_qtree_make_is(str), *qroot);
+  } else if (is_file && *qroot) {
+    *qroot=_qtree_make_and(_qtree_make_is_inode(path_hash), *qroot);
   }
   return 0;
 }
@@ -274,35 +330,62 @@ static int _path_to_query_proc(const char *str, unsigned long data) {
 /**
  * Converts a path to a simple conjunctive query.
  *
- * @param path The path to be parsed.
+ * @param path The (not necessarily canonical) path to be parsed.
  * @returns A pointer to a tree structure representing the query, or NULL if an
- * error occurred.
+ * error occurred. If an error occurs, \c errno is set appropriately.
  */
 qelem *path_to_query(const char *path) {
   if (!path) return NULL;
 
-  char *dup = strdup(path);
+  char *dup = get_canonical_path(path);
+  DEBUG("Canonical path: \"%s\"", path);
+  if (!dup || errno) {
+    DEBUG("Error in get_canonical_path()");
+    errno=ENOENT;
+    return NULL;
+  }
+  char *tmp = dup;
   qelem *qroot=NULL;
 
   /* remove leading slash characters */
-  while (dup[0] && dup[0]=='/')
-    dup++;
+  while (*tmp && *tmp=='/')
+    tmp++;
 
   /* If we have a zero-length path, then that matches any tag */
-  if (!*dup) {
+  if (!*tmp) {
     DEBUG("Top-level ISANY");
     qroot = _qtree_make_isany();
+
   } else {
-    if (strsplitmap(dup, '/', _path_to_query_proc, (unsigned long)&qroot)) {
+    int res = strsplitmap(tmp, '/', _path_to_query_proc, (unsigned long)&qroot);
+
+    if (res==0) {
+      DEBUG("Success");
+    } else if (res==-ENOENT) {
+      DEBUG("A component of the path does not exist");
+      ifree(dup);
+      errno=ENOENT;
+      return NULL;
+    } else {
+      DEBUG("Problem with strsplitmap");
+      ifree(dup);
+      errno=-res;
+      return NULL;
+    }
+
+    if (_qtree_contains(qroot, QUERY_IS_INODE) && !query_inode_count(qroot)) {
+      /* cannot find that inode with the query */
+      DEBUG("Could not find the given file");
+      errno=ENOENT;
       return NULL;
     }
   }
 
-  DEBUG("\033[1;31mDumping tree...\033[m");
+  DEBUG("Dumping tree...");
   _qtree_dump(qroot, 0);
-  DEBUG("\033[1;32mTree dump done.\033[m");
+  DEBUG("Tree dump done.");
 
-  // XXX: ifree(dup);
+  ifree(dup);
   return qroot;
 }
 
@@ -423,6 +506,23 @@ int query_get_subtags(const qelem *query, char *parent, int len) {
 }
 
 /**
+ * Get number of inodes a query would return. May be optimised.
+ *
+ * @param query The root of the query to use.
+ * @returns The number of inodes that would be found by the query.
+ */
+int query_inode_count(const qelem * const query) {
+  int count=0, neg=0;
+  fileptr *inodes = query_to_inodes(query, &count, &neg);
+  if (!inodes) {
+    DEBUG("Error");
+    return 0;
+  }
+  ifree(inodes);
+  return count;
+}
+
+/**
  * Get inode list from query tree. The returned list is allocated with malloc()
  * and should be freed with free().
  *
@@ -476,18 +576,14 @@ fileptr *query_to_inodes(const qelem * const query, int * const count, int * con
 
         /* TODO: get all subkeys */
 
-        DEBUG("IS: creating list of inodes from block %lu, negation 0", dblock);
+        DEBUG("IS: fetching recursive list of inodes from block %lu, negation 0", dblock);
         *neg=0;
-        *count = inode_get_all(dblock, NULL, 0);
+        fileptr *inodes = inode_get_all_recurse(dblock, count);
         DEBUG("IS: %d inodes in block %lu", *count, dblock);
-        if (*count>0) {
-          fileptr *inodes = calloc(*count, sizeof(fileptr));
-          inode_get_all(dblock, inodes, *count);
+        if (inodes && *count>=0) {
           return inodes;
-        } else if (*count==0) {
-          /* empty return list to avoid error; must still be freed though */
-          return calloc(1, sizeof(fileptr));
-        } else if (*count<0) {
+        } else {
+          if (inodes) ifree(inodes);
           DEBUG("Error calling inode_get_all(): %s", strerror(-*count));
           return NULL;
         }

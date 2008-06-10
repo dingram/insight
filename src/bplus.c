@@ -15,7 +15,8 @@
 #include "bplus.h"
 #include "bplus_debug.h"
 #include "bplus_priv.h"
-#include "set_ops.h"
+#include <set_ops.h>
+#include <insight.h>
 
 /**
  * Format the tree file, initialising the superblock and free space.
@@ -1548,6 +1549,46 @@ int tree_write_sb (tsblock *super) {
 
 
 /**
+ * Apply a given user-defined function to all keys in the tree rooted at \a root. The function needs to take three arguments:
+ *
+ *  - <tt>const char *</tt> - The key.
+ *  - <tt>const fileptr</tt> - The block index that this key points to.
+ *  - <tt>void *data</tt> - The data argument given to the tree_map_keys() function.
+ *
+ * The user-defined function should return zero, although it may return 1 to
+ * cause the loop to immediately terminate successfully or any negative value
+ * to indicate an internal error, terminating the loop and exiting
+ * tree_map_keys() with that value as its return value.
+ *
+ * @returns Zero on success, non-zero on failure.
+ */
+int tree_map_keys(const fileptr root, int (*func)(const char *, const fileptr, void *), void *data) {
+  tnode node;
+  int ret=0, i;
+
+  if (tree_sub_get_min(root, &node)) {
+    PMSG(LOG_ERR, "tree_sub_get_min() failed\n");
+    return -EIO;
+  }
+
+  do {
+    for (i=0; i<node.keycount; i++) {
+      ret = func(node.keys[i], node.ptrs[i+1], data);
+      if (ret) {
+        if (ret==1) ret=0;
+        break;
+      }
+    }
+    if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
+      PMSG(LOG_ERR, "I/O error reading block\n");
+      return -EIO;
+    }
+  } while (node.ptrs[0]);
+
+  return ret;
+}
+
+/**
  * Follow the linked list of inodes starting at the given block number, freeing
  * all of them.
  *
@@ -1626,7 +1667,6 @@ int inode_insert(fileptr block, fileptr inode) {
 int inode_put_all(fileptr block, fileptr *inodes, int count) {
   tdata datablock;
   int curinode=0;
-  unsigned long oldcount;
 
   if (!inodes) {
     PMSG(LOG_ERR, "No inode list given");
@@ -1638,7 +1678,6 @@ int inode_put_all(fileptr block, fileptr *inodes, int count) {
 
   if (!block) {
     DEBUG("Starting at superblock and writing inodes in limbo");
-    oldcount = tree_sb->limbo_count;
     tree_sb->limbo_count = MIN(count, INODECOUNT);
     datablock.inodecount = tree_sb->limbo_count;
     if (!tree_sb->inode_limbo) {
@@ -1661,7 +1700,6 @@ int inode_put_all(fileptr block, fileptr *inodes, int count) {
       PMSG(LOG_ERR, "Problem reading data block");
       return -EIO;
     }
-    oldcount = datablock.inodecount;
 
     DEBUG("Copying %u inodes from user buffer direct to block", MIN(count, INODECOUNT));
     datablock.inodecount = MIN(count, INODECOUNT);
@@ -1729,6 +1767,35 @@ int inode_put_all(fileptr block, fileptr *inodes, int count) {
   return 0;
 }
 
+static int _rec_inode_func(const char *key, const fileptr ptr, void *data) {
+  struct {
+    int count;
+    fileptr *list;
+  } *pdata = data;
+  int subcount;
+  (void) key;
+  DEBUG("Fetching sublist items from block %lu", ptr);
+  fileptr *sublist = inode_get_all_recurse(ptr, &subcount);
+  if (!sublist) {
+    PMSG(LOG_ERR, "Failed to get sublist");
+    return -EIO;
+  }
+  DEBUG("Got %d items from sublist", subcount);
+  fileptr *oldlist = pdata->list;
+  pdata->list = calloc(pdata->count + subcount, sizeof(fileptr));
+  DEBUG("Merging sublist and previous list");
+  pdata->count = set_union(oldlist, sublist, pdata->list, pdata->count, subcount, pdata->count+subcount, sizeof(fileptr), inodecmp);
+  DEBUG("Union complete");
+  DEBUG("Union contains %d items", pdata->count);
+  if (pdata->count<0) {
+    PMSG(LOG_ERR, "Set union failed");
+    return -EIO;
+  }
+  ifree(oldlist);
+  ifree(sublist);
+  return 0;
+}
+
 /**
  * Fetch all inodes recursively from the given block, following links as
  * required. The \a block argument may refer to either a data block, an inode
@@ -1741,57 +1808,99 @@ int inode_put_all(fileptr block, fileptr *inodes, int count) {
  * @returns Zero on success, the number of inodes if \a inodes is NULL, or a
  * negative error code on failure.
  */
-int inode_get_all_recurse(fileptr block, fileptr *inodes, int max) {
-  tblock readblock;
-  int curinode=0;
-
+fileptr *inode_get_all_recurse(fileptr block, int *count) {
   if (!block) {
     DEBUG("Starting at superblock");
-    return inode_get_all(block, inodes, max);
+    *count = inode_get_all(block, NULL, 0);
+    if (*count<0) {
+      PMSG(LOG_ERR, "Problem reading inode list");
+      return NULL;
+    }
+    fileptr *list = calloc(*count?*count:1, sizeof(fileptr));
+    if (!list) {
+      PMSG(LOG_ERR, "Failed to allocate memory for list");
+      return NULL;
+    }
+    if (*count) {
+      inode_get_all(block, list, *count);
+    }
+    return list;
   }
+
+  tblock readblock;
 
   DEBUG("Starting at block index %lu", block);
   if (tree_read(block, &readblock)) {
     PMSG(LOG_ERR, "Problem reading block");
-    return -EIO;
+    return NULL;
   }
 
   switch (readblock.magic) {
     case MAGIC_DATANODE:
-    case MAGIC_FREEBLOCK:
-    case MAGIC_INODEBLOCK:
+      {
+        DEBUG("Fetching list from this node");
+        int count1 = inode_get_all(block, NULL, 0);
+        if (count1<0) {
+          PMSG(LOG_ERR, "Problem reading inode list");
+          return NULL;
+        }
+        fileptr *thislist = calloc(count1?count1:1, sizeof(fileptr));
+        if (!thislist) {
+          PMSG(LOG_ERR, "Failed to allocate memory for list");
+          return NULL;
+        }
+        DEBUG("Fetching %d inodes from this node", count1);
+        inode_get_all(block, thislist, count1);
+        if (!((tdata*)&readblock)->subkeys) {
+          DEBUG("No subkeys, so no union needed");
+          *count = count1;
+          return thislist;
+        }
+        int count2=0;
+        DEBUG("Fetching subkeys list");
+        fileptr *sublist = inode_get_all_recurse(((tdata*)&readblock)->subkeys, &count2);
+        DEBUG("Fetched %d inodes from subkeys", count2);
+        if (!sublist) {
+          PMSG(LOG_ERR, "Error getting sublist");
+          ifree(thislist);
+          return NULL;
+        }
+        fileptr *outlist = calloc(count1+count2, sizeof(fileptr));
+        *count = set_union(thislist, sublist, outlist, count1, count2, count1+count2, sizeof(fileptr), inodecmp);
+        ifree(thislist);
+        ifree(sublist);
+        return outlist;
+      }
+      break;
+
     case MAGIC_TREENODE:
+      {
+        struct {
+          int count;
+          fileptr *list;
+        } pdata;
+
+        DEBUG("Allocating list");
+        pdata.list=calloc(1, sizeof(fileptr)); /* TODO: check for failure */
+        pdata.count= 0;
+
+        DEBUG("Mapping across keys");
+        int ret = tree_map_keys(block, _rec_inode_func, &pdata);
+        if (ret<0) {
+          PMSG(LOG_ERR, "Mapping across keys failed");
+          errno=ret;
+          return NULL;
+        }
+        DEBUG("Success");
+        *count = pdata.count;
+        return pdata.list;
+      }
+      break;
+
     default:
-      PMSG(LOG_ERR, "Unknown block magic %08lX");
-      return -EBADF;
+      PMSG(LOG_ERR, "Unknown block magic %08lX", readblock.magic);
+      return NULL;
   }
-
-  if (!inodes) {
-    DEBUG("Number of array entries required: %u", datablock.inodecount);
-    return datablock.inodecount;
-  }
-  if (datablock.inodecount > max) {
-    PMSG(LOG_ERR, "Number of inodes (%u) greater than output array size (%d)", datablock.inodecount, max);
-    return -ENOMEM;
-  }
-
-  DEBUG("Copying inodes to user buffer");
-  memcpy(inodes, datablock.inodes, MIN(datablock.inodecount, INODECOUNT)*sizeof(fileptr));
-  curinode += MIN(datablock.inodecount, INODECOUNT);
-
-  fileptr inodeptr;
-  tinode ib;
-  /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
-  for (inodeptr = datablock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {
-    if (tree_read(inodeptr, (tblock*)&ib) || ib.magic!=MAGIC_INODEBLOCK) {
-      PMSG(LOG_ERR, "Problem reading inode block");
-      return -EIO;
-    }
-    memcpy(&inodes[curinode], ib.inodes, ib.inodecount*sizeof(fileptr));
-    curinode += MIN(ib.inodecount, INODE_MAX);
-  }
-
-  return 0;
 }
 
 /**
@@ -1837,10 +1946,13 @@ int inode_get_all(fileptr block, fileptr *inodes, int max) {
     curinode += MIN(datablock.inodecount, INODECOUNT);
   }
 
+  DEBUG("Following pointers if required...");
+
   fileptr inodeptr;
   tinode ib;
   /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
   for (inodeptr = datablock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {
+    DEBUG("Following pointer... to block %lu", inodeptr);
     if (tree_read(inodeptr, (tblock*)&ib) || ib.magic!=MAGIC_INODEBLOCK) {
       PMSG(LOG_ERR, "Problem reading inode block");
       return -EIO;

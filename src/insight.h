@@ -129,7 +129,7 @@ struct insight {
   struct stat mountstat; /**< lstat() results for mountpoint */
 };
 
-/*extern struct insight insight;*/
+/*extern*/ struct insight insight;
 
 /** free() with guard to avoid double-freeing anything */
 #define ifree(x) do {\

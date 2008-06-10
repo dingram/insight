@@ -30,7 +30,7 @@
 
 #include <insight.h>
 #include <bplus.h>
-#ifndef _DEBUG
+#if defined(_DEBUG_CORE) && !defined(_DEBUG)
 #define _DEBUG
 #endif
 #include <debug.h>
@@ -143,7 +143,6 @@ static struct fuse_operations insight_oper = {
 static int usage_printed = 0;
 
 
-
 static int insight_getattr(const char *path, struct stat *stbuf)
 {
   char *canon_path = get_canonical_path(path);
@@ -152,11 +151,29 @@ static int insight_getattr(const char *path, struct stat *stbuf)
     return -ENOENT;
   }
 
+#if 0
+  DEBUG("Getattr called on path \"%s\"", path);
+
+  DEBUG("Generating query tree");
+  qelem *q = path_to_query(path);
+
+  if (!q) {
+    if (errno == ENOENT) {
+      DEBUG("Path not valid");
+    } else {
+      DEBUG("Error in generating query tree: %s", strerror(errno));
+    }
+    return -errno;
+  }
+#endif
+
   struct stat fstat;
+  char *canon_path = get_canonical_path(path);
+  char *last = strlast(canon_path+1, '/');
 
   DEBUG("Getattr called on path \"%s\"", canon_path);
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
+  if (have_file_by_name(last, &fstat)) {
     DEBUG("Got a file\n");
 
     memcpy(stbuf, &fstat, sizeof(struct stat));
@@ -178,12 +195,20 @@ static int insight_getattr(const char *path, struct stat *stbuf)
       return 0;
     }
 
-    if (strlen(canon_path)>2 && last_char_in(canon_path)==INSIGHT_SUBKEY_IND_C && canon_path[strlen(canon_path)-2]=='/') {
+    if (strlen(path)>2 && last_char_in(path)==INSIGHT_SUBKEY_IND_C && path[strlen(path)-2]=='/') {
       /* just a subkey indicator directory */
       DEBUG("Getattr on a subkey indicator directory");
       stbuf->st_mode = S_IFDIR | 0555;
       stbuf->st_nlink = 1;
-      stbuf->st_ino = hash_path(canon_path, strlen(canon_path));
+      char *tmpp = calloc(strlen(canon_path)+2, sizeof(char));
+      if (!tmpp) {
+        PMSG(LOG_ERR, "Failed to allocate temporary space for hash path");
+        return -ENOMEM;
+      }
+      strcpy(tmpp, canon_path);
+      strcat(tmpp, ":");
+      stbuf->st_ino = hash_path(tmpp, strlen(tmpp));
+      ifree(tmpp);
     } else {
       int subtag=0;
       fileptr tagdata;
@@ -242,7 +267,7 @@ static int insight_readdir(const char *path, void *buf,
   char *last_tag=calloc(255, sizeof(char));
 
   DEBUG("Generating query tree");
-  qelem *q = path_to_query(canon_path);
+  qelem *q = path_to_query(path);
 
   DEBUG("Finding subtag parent...");
   (void)query_get_subtags(q, last_tag, 255);
@@ -291,7 +316,7 @@ static int insight_readdir(const char *path, void *buf,
   DEBUG("%d inodes to consider", inodecount);
 
   for (i=0; i<inodecount; i++) {
-    char *str = basename_from_inode(inodelist[i], insight.repository);
+    char *str = basename_from_inode(inodelist[i]);
     if (str) {
       DEBUG("Adding filename \"%s\" to listing", str);
       filler(buf, str, NULL, 0);
@@ -347,6 +372,7 @@ static int insight_readdir(const char *path, void *buf,
     }
   }
 
+  /* TODO: change to use tree_map_keys() */
 
   int count, k, isunique=1;
   char **bits = strsplit(canon_path, '/', &count);
@@ -633,7 +659,7 @@ static int insight_symlink(const char *from, const char *to)
   sprintf(s_hash, "%08lX", hash);
   DEBUG("Repos target therefore: %s -> %s", s_hash, from);
 
-  finaldest = gen_repos_path(s_hash, 1, insight.repository);
+  finaldest = gen_repos_path(s_hash, 1);
   if (!finaldest) {
     PMSG(LOG_ERR, "IO error: Failed to generate repository path");
     return -EIO;
@@ -675,8 +701,8 @@ static int insight_chmod(const char *path, mode_t mode)
 
   struct stat fstat;
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1), insight.repository);
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
     DEBUG("Changing mode of real file: %s", fullname);
     if (chmod(fullname, mode)==-1) {
       PMSG(LOG_ERR, "chmod(\"%s\", %05o) failed: %s", fullname, mode, strerror(errno));
@@ -703,8 +729,8 @@ static int insight_chown(const char *path, uid_t uid, gid_t gid)
 
   struct stat fstat;
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1), insight.repository);
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
     DEBUG("Change ownership of real file: %s", fullname);
     if (chown(fullname, uid, gid)==-1) {
       PMSG(LOG_ERR, "chown(\"%s\", %u, %u) failed: %s", fullname, uid, gid, strerror(errno));
@@ -731,11 +757,11 @@ static int insight_truncate(const char *path, off_t size)
 
   struct stat fstat;
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1), insight.repository);
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
     DEBUG("Truncating real file: %s", fullname);
     if (truncate(fullname, size)==-1) {
-      PMSG(LOG_ERR, "truncate(\"%s\", %lu) failed: %s", fullname, size, strerror(errno));
+      PMSG(LOG_ERR, "truncate(\"%s\", %lld) failed: %s", fullname, size, strerror(errno));
       ifree(fullname);
       return -errno;
     } else {
@@ -761,8 +787,8 @@ static int insight_utimens(const char *path, const struct timespec tv[2])
 
   struct stat fstat;
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1), insight.repository);
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
     struct timeval tvv;
     DEBUG("Change times of real file: %s", fullname);
     tvv.tv_sec = tv->tv_sec;
@@ -794,8 +820,8 @@ static int insight_utime(const char *path, struct utimbuf *buf)
 
   struct stat fstat;
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat, insight.repository)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1), insight.repository);
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
     DEBUG("Change times of real file: %s", fullname);
     if (utime(fullname, buf)==-1) {
       PMSG(LOG_ERR, "utime(\"%s\", tv) failed: %s", fullname, strerror(errno));
@@ -827,8 +853,8 @@ static int insight_open(const char *path, struct fuse_file_info *fi)
 
   DEBUG("Last returned \"%s\"", last);
 
-  if (have_file_by_name(last, &fstat, insight.repository)) {
-    char *fullname = fullname_from_inode(hash_path(last, strlen(last)), insight.repository);
+  if (have_file_by_name(last, &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(last, strlen(last)));
     int res;
     DEBUG("Opening real file: %s", fullname);
     if ((res=open(fullname, fi->flags|O_RDONLY))==-1) {
@@ -867,9 +893,9 @@ static int insight_read(const char *path, char *buf, size_t size,
   struct stat fstat;
   char *last = strlast(canon_path, '/');
 
-  if (have_file_by_name(last, &fstat, insight.repository)) {
+  if (have_file_by_name(last, &fstat)) {
     unsigned long hash = hash_path(last, strlen(last));
-    char *fullname = fullname_from_inode(hash, insight.repository);
+    char *fullname = fullname_from_inode(hash);
     int fd;
     DEBUG("Opening real file: %s", fullname);
     if ((fd=open(fullname, fi->flags|O_RDONLY))==-1) {
@@ -900,14 +926,41 @@ static int insight_read(const char *path, char *buf, size_t size,
 static int insight_write(const char *path, const char *buf, size_t size,
              off_t offset, struct fuse_file_info *fi)
 {
-  (void) path;
-  (void) buf;
-  (void) size;
-  (void) offset;
-  (void) fi;
-  DEBUG("Write on path \"%s\"\n", path);
+  char *canon_path = get_canonical_path(path);
 
-  return -EACCES;
+  DEBUG("Write on path \"%s\"", canon_path);
+
+  struct stat fstat;
+  char *last = strlast(canon_path, '/');
+
+  if (have_file_by_name(last, &fstat)) {
+    unsigned long hash = hash_path(last, strlen(last));
+    char *fullname = fullname_from_inode(hash);
+    int fd;
+    DEBUG("Opening real file: %s", fullname);
+    if ((fd=open(fullname, fi->flags|O_WRONLY))==-1) {
+      PMSG(LOG_ERR, "open(\"%s\", %d) failed: %s", fullname, fi->flags, strerror(errno));
+      ifree(fullname);
+      ifree(last);
+      return -errno;
+    } else {
+      int res, tmp_errno=0;
+      res = pwrite(fd, buf, size, offset);
+      tmp_errno=errno;
+      close(fd);
+      ifree(fullname);
+      ifree(last);
+      return (res==-1)?-tmp_errno:res;
+    }
+  } else if (validate_path(canon_path)) {
+    PMSG(LOG_ERR, "Cannot write to directories like files!");
+    ifree(last);
+    return -EISDIR;
+  } else {
+    DEBUG("Could not find path");
+    ifree(last);
+    return -ENOENT;
+  }
 }
 
 #if FUSE_VERSION >= 26
@@ -939,6 +992,7 @@ static int insight_release(const char *path, struct fuse_file_info *fi)
   (void) fi;
 
   DEBUG("Release on \"%s\"", path);
+  /* Nothing to do here */
   return 0;
 }
 
@@ -975,7 +1029,18 @@ static void *insight_init(void)
 }
 #endif
 
-
+/**
+ * Cleanup function run when the file system is unmounted.
+ *
+ * @param arg An argument passed by FUSE. Ignored.
+ */
+void insight_destroy(void *arg)
+{
+  (void) arg;
+	PMSG(LOG_ERR, "Cleaning up and exiting");
+  tree_close();
+	FMSG(LOG_ERR, "Tree store closed");
+}
 
 
 /**
@@ -983,8 +1048,7 @@ static void *insight_init(void)
  *
  * @param progname The command name used to invoke insight
  */
-void usage(char *progname)
-{
+void usage(char *progname) {
   if (usage_printed++)
     return;
 
@@ -1010,8 +1074,8 @@ void usage(char *progname)
     , PACKAGE_VERSION, FUSE_USE_VERSION, progname
   );
 }
-static int insight_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs)
-{
+
+static int insight_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs) {
     (void) data;
 
     switch (key) {
@@ -1263,19 +1327,6 @@ static int insight_check_repos() {
   }
 
   return 0;
-}
-
-/**
- * Cleanup function run when the file system is unmounted.
- *
- * @param arg An argument passed by FUSE. Ignored.
- */
-void insight_destroy(void *arg)
-{
-  (void) arg;
-	PMSG(LOG_ERR, "Cleaning up and exiting");
-  tree_close();
-	FMSG(LOG_ERR, "Tree store closed");
 }
 
 int main(int argc, char *argv[]) {
