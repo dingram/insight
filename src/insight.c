@@ -168,7 +168,9 @@ static int insight_getattr(const char *path, struct stat *stbuf)
 #endif
 
   struct stat fstat;
+#if 0
   char *canon_path = get_canonical_path(path);
+#endif
   char *last = strlast(canon_path+1, '/');
 
   DEBUG("Getattr called on path \"%s\"", canon_path);
