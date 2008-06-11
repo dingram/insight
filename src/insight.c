@@ -1140,7 +1140,7 @@ static void insight_process_args(struct fuse_args *args) {
       fprintf(stderr, "%s: Running in foreground\n", insight.progname);
     fuse_opt_add_arg(args, "-f");
   }
-  if (insight.verbose) {
+  if (insight.debug || insight.verbose) {
     if (!insight.quiet)
       fprintf(stderr, "%s: Will log verbosely\n", insight.progname);
     fuse_opt_add_arg(args, "-d");
