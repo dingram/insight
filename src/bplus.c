@@ -765,8 +765,8 @@ int tree_get_min(tnode *node) {
 int tree_sub_get_min(fileptr root, tnode *node) {
   DEBUG("tree_sub_get_min(%lu)", root);
   if (!root) {
-    PMSG(LOG_ERR, "Root is zero");
-    return 0;
+    DEBUG("Root is zero -- using main root");
+    return tree_sub_get_min(tree_sb->root_index, node);
   }
 
   if (tree_read(root, (tblock*)node)) {
@@ -1616,6 +1616,49 @@ int inode_free_chain(fileptr block) {
  * @returns Zero on success, error code on failure.
  */
 int inode_insert(fileptr block, fileptr inode) {
+  fileptr *inodes;
+  DEBUG("Inserting %08lX into inode list at block %lu", inode, block);
+  int count = inode_get_all(block, NULL, 0);
+  DEBUG("Need %d inodes of space", count);
+  if (count < 0) {
+    PMSG(LOG_ERR, "IO error in getting inode list");
+    return EIO;
+  }
+
+
+  inodes = malloc((count+1)*sizeof(fileptr));
+  if (!inodes) {
+    PMSG(LOG_ERR, "Failed to allocate memory for inodes array");
+    return ENOMEM;
+  }
+  if (inode_get_all(block, inodes, count+1)<0) {
+    PMSG(LOG_ERR, "Failed to get inode array from block %lu", block);
+    free(inodes);
+    return EIO;
+  }
+
+  /* insert node */
+  inodes[count] = inode;
+
+  /* save array back to target block */
+  if (inode_put_all(block, inodes, count+1)<0) {
+    PMSG(LOG_ERR, "Failed to save inode array to block %lu", block);
+    free(inodes);
+    return EIO;
+  }
+
+  free(inodes);
+  return 0;
+}
+
+/**
+ * Remove the given inode from the given data block. If block is zero, remove from the limbo list.
+ *
+ * @param block The data block index, or zero for the limbo list.
+ * @param inode The inode to be inserted.
+ * @returns Zero on success, error code on failure.
+ */
+int inode_remove(fileptr block, fileptr inode) {
   fileptr *inodes;
   DEBUG("Inserting %08lX into inode list at block %lu", inode, block);
   int count = inode_get_all(block, NULL, 0);

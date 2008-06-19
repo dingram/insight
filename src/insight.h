@@ -40,6 +40,17 @@
 #define FUSE_USE_VERSION 26
 #endif
 
+/* Define required to get prototypes for pread/pwrite */
+#ifdef _XOPEN_SOURCE
+#undef _XOPEN_SOURCE
+#endif
+#define _XOPEN_SOURCE 500
+
+/* But doing so might hide other interfaces */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>

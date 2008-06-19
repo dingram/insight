@@ -222,10 +222,17 @@ static int insight_getattr(const char *path, struct stat *stbuf)
         PMSG(LOG_ERR, "IO error reading data block");
         return -EIO;
       }
+
+      stbuf->st_mode = 0555;
+
       if (dnode.flags & DATA_FLAGS_SYNONYM) {
-        stbuf->st_mode = S_IFLNK | 0555;
+        stbuf->st_mode |= S_IFLNK;
       } else {
-        stbuf->st_mode = S_IFDIR | 0555;
+        stbuf->st_mode |= S_IFDIR;
+      }
+      if (dnode.flags & DATA_FLAGS_NOSUB) {
+        /* add sticky bit */
+        stbuf->st_mode |= S_ISVTX;
       }
       stbuf->st_nlink = 1;
       /* provide probably unique inodes for directories */
@@ -259,7 +266,7 @@ static int insight_readdir(const char *path, void *buf,
   char *last_tag=calloc(255, sizeof(char));
 
   DEBUG("Generating query tree");
-  qelem *q = path_to_query(path);
+  qelem *q = path_to_query(path); /* TODO: check for failure */
 
   DEBUG("Finding subtag parent...");
   (void)query_get_subtags(q, last_tag, 255);
