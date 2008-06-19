@@ -61,6 +61,17 @@ static inline qelem *_qtree_make_is(const char *tag) {
   return node;
 }
 
+static inline qelem *_qtree_make_is_nosub(const char *tag) {
+  qelem *node=calloc(1, sizeof(qelem));
+  if (!node) {
+    PMSG(LOG_ERR, "Failed to allocate space for query node");
+    return NULL;
+  }
+  node->type=QUERY_IS_NOSUB;
+  node->tag=strdup(tag);
+  return node;
+}
+
 static inline qelem *_qtree_make_is_inode(const fileptr inode) {
   qelem *node=calloc(1, sizeof(qelem));
   if (!node) {
@@ -137,6 +148,7 @@ static int _qtree_contains(const qelem *root, const unsigned int type) {
   switch (root->type) {
     case QUERY_IS_ANY:
     case QUERY_IS:
+    case QUERY_IS_NOSUB:
     case QUERY_IS_INODE:
       return 0;
       break;
@@ -178,6 +190,10 @@ static void _qtree_dump(const qelem *node, int indent) {
 
     case QUERY_IS:
       DEBUG("%sIS: %s", spc, node->tag);
+      break;
+
+    case QUERY_IS_NOSUB:
+      DEBUG("%sIS_NOSUB: %s", spc, node->tag);
       break;
 
     case QUERY_IS_INODE:
@@ -262,7 +278,7 @@ int qtree_consistent(qelem *root, int strict) {
       return 1;
       break;
 
-    case QUERY_IS:
+    case QUERY_IS_NOSUB:
       if (!root->tag) return 0;
       if (!strict) return 1;
       if (root->inode || root->next[0] || root->next[1]) return 0;
@@ -306,23 +322,36 @@ int qtree_consistent(qelem *root, int strict) {
  */
 static int _path_to_query_proc(const char *str, unsigned long data) {
   DEBUG("str: \"%s\"", str);
+  qelem *newnode=NULL;
   qelem **qroot=(qelem**)data;
   int is_tag = get_tag(str);
   unsigned long path_hash = hash_path(str, strlen(str));
   int is_file = have_file_by_hash(path_hash, NULL);
 
-  if (!is_tag && !is_file) {
+  if (is_tag) {
+    tdata dblock;
+    if (tree_read(is_tag, (tblock*)&dblock)) {
+      PMSG(LOG_ERR, "I/O error reading block\n");
+      return -EIO;
+    }
+    if (dblock.flags & DATA_FLAGS_NOSUB) {
+      newnode=_qtree_make_is_nosub(str);
+    } else {
+      newnode=_qtree_make_is(str);
+    }
+
+  } else if (is_file) {
+    newnode=_qtree_make_is_inode(path_hash);
+
+  } else {
     DEBUG("Tag \"%s\" does not exist");
     return -ENOENT;
   }
-  if (is_tag && !*qroot) {
-    *qroot=_qtree_make_is(str);
-  } else if (is_file && !*qroot) {
-    *qroot=_qtree_make_is_inode(path_hash);
-  } else if (is_tag && *qroot) {
-    *qroot=_qtree_make_and(_qtree_make_is(str), *qroot);
-  } else if (is_file && *qroot) {
-    *qroot=_qtree_make_and(_qtree_make_is_inode(path_hash), *qroot);
+
+  if (*qroot) {
+    *qroot=_qtree_make_and(newnode, *qroot);
+  } else {
+    *qroot=newnode;
   }
   return 0;
 }
@@ -413,6 +442,7 @@ int query_get_subtags(const qelem *query, char *parent, int len) {
       break;
 
     case QUERY_IS:
+    case QUERY_IS_NOSUB:
       if (last_char_in(query->tag)==INSIGHT_SUBKEY_IND_C) {
         /* incomplete tag - aha! */
         DEBUG("Found incomplete tag \"%s\"!", query->tag);

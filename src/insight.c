@@ -229,10 +229,10 @@ static int insight_getattr(const char *path, struct stat *stbuf)
         stbuf->st_mode |= S_IFLNK;
       } else {
         stbuf->st_mode |= S_IFDIR;
-      }
-      if (dnode.flags & DATA_FLAGS_NOSUB) {
-        /* add sticky bit */
-        stbuf->st_mode |= S_ISVTX;
+        if (dnode.flags & DATA_FLAGS_NOSUB) {
+          /* add sticky bit */
+          stbuf->st_mode |= S_ISVTX;
+        }
       }
       stbuf->st_nlink = 1;
       /* provide probably unique inodes for directories */
@@ -360,6 +360,7 @@ static int insight_readdir(const char *path, void *buf,
     DEBUG("Calling tree_sub_get_min(%lu)", tree_root);
     if (tree_sub_get_min(tree_root, &n)) {
       PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed\n");
+      ifree(lastbit);
       ifree(last_tag);
       return -EIO;
     }
@@ -369,6 +370,8 @@ static int insight_readdir(const char *path, void *buf,
       DEBUG("Adding subkey indicator directory");
       filler(buf, INSIGHT_SUBKEY_IND, NULL, 0);
     }
+
+    ifree(lastbit);
   }
 
   /* TODO: change to use tree_map_keys() */
@@ -712,8 +715,36 @@ static int insight_chmod(const char *path, mode_t mode)
       return 0;
     }
   } else if (validate_path(canon_path)) {
-    DEBUG("Cannot change mode of directories");
-    return -EPERM;
+    char *last_tag = strlast(canon_path, '/');
+    int is_sticky = (mode & S_ISVTX);
+    DEBUG("%setting nosub bit of tag: %s", is_sticky?"S":"Uns", last_tag);
+    int tagblock = get_tag(last_tag);
+    if (!tagblock) {
+      PMSG(LOG_ERR, "Serious problem. Valid path but tag not found.");
+      ifree(last_tag);
+      return -EIO;
+    }
+
+    tdata dblock;
+    if (tree_read(tagblock, (tblock*)&dblock)) {
+      PMSG(LOG_ERR, "I/O error reading block\n");
+      ifree(last_tag);
+      return -EIO;
+    }
+    if (is_sticky) {
+      SET_FLAG(dblock.flags, DATA_FLAGS_NOSUB);
+    } else {
+      CLEAR_FLAG(dblock.flags, DATA_FLAGS_NOSUB);
+    }
+    if (tree_write(tagblock, (tblock*)&dblock)) {
+      PMSG(LOG_ERR, "I/O error writing block\n");
+      ifree(last_tag);
+      return -EIO;
+    }
+
+    DEBUG("Cannot really change mode of directories though");
+    ifree(last_tag);
+    return 0;
   } else {
     DEBUG("Could not find path");
     return -ENOENT;

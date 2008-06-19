@@ -133,6 +133,10 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
  * belong to it and NOT recurse.  */
 #define DATA_FLAGS_NOSUB 0x02
 
+/** Flag set macro */
+#define SET_FLAG(v,f) do { (v) |= (f); } while (0)
+/** Flag clear macro */
+#define CLEAR_FLAG(v,f) do { (v) = ((v) | (f)) ^ (f); } while (0)
 
 /*****************************************************************************
  * FUNCTION PROTOTYPES
