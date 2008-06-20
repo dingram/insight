@@ -227,6 +227,8 @@ static int insight_getattr(const char *path, struct stat *stbuf)
 
       if (dnode.flags & DATA_FLAGS_SYNONYM) {
         stbuf->st_mode |= S_IFLNK;
+        /* must set symlink size too - length of string without final null */
+        stbuf->st_size = strlen(dnode.target);
       } else {
         stbuf->st_mode |= S_IFDIR;
         if (dnode.flags & DATA_FLAGS_NOSUB) {
@@ -570,10 +572,69 @@ static int insight_rmdir(const char *path)
 
 static int insight_unlink(const char *path)
 {
-  (void) path;
+  unsigned long hash;
+  char s_hash[9];
+  char *finaldest;
 
   DEBUG("Unlink \"%s\"", path);
-  return -ENOENT;
+
+  if (!path) {
+    FMSG(LOG_ERR, "Asked to unlink file with null path!");
+    return -EINVAL;
+  }
+
+  if (strcount(path+1, '/')) {
+    DEBUG("Can only unlink files at the top level... for now.");
+    return -EPERM;
+  }
+
+  /* IMPORTANT NOTE: rm is also called for symlinks but we don't deal with that
+   * at all. Should check for tag existing first, and if it exists check its
+   * flags and remove as appropriate. */
+
+  /* calculate an inode number for the path */
+  DEBUG("Hashing \"%s\"...", path+1);
+  hash = hash_path(path+1, strlen(path+1));
+  sprintf(s_hash, "%08lX", hash);
+  DEBUG("Repos symlink therefore: %s", s_hash);
+
+  finaldest = gen_repos_path(s_hash, 1);
+  if (!finaldest) {
+    PMSG(LOG_ERR, "IO error: Failed to generate repository path");
+    return -EIO;
+  }
+
+  struct stat s;
+  if (stat(finaldest, &s) == -1) {
+    /* file does not exists or error finding it... */
+    if (errno==ENOENT) {
+      PMSG(LOG_ERR, "The repository symlink has vanished!");
+      ifree(finaldest);
+      return -EIO;
+    } else {
+      PMSG(LOG_ERR, "Error while stat()ing %s: %s", finaldest, strerror(errno));
+      ifree(finaldest);
+      return -EIO;
+    }
+  }
+
+  DEBUG("Final unlink call: unlink(\"%s\")", finaldest);
+
+  DEBUG("Removing inode from tree at root level (for now)");
+  if ((errno=inode_remove(0, hash))) {
+    PMSG(LOG_ERR, "IO error: Failed to remove inode from tree: %s\n", strerror(errno));
+    ifree(finaldest);
+    return -EIO;
+  }
+
+  if (unlink(finaldest)==-1) {
+    PMSG(LOG_ERR, "IO error: Symlink removal failed: %s", strerror(errno));
+    ifree(finaldest);
+    return -EIO;
+  }
+
+  ifree(finaldest);
+  return 0;
 }
 
 static int insight_mknod(const char *path, mode_t mode, dev_t rdev)
@@ -620,7 +681,7 @@ static int insight_readlink(const char *path, char *buf, size_t size)
     DEBUG("Tag \"%s\" not found\n", canon_path+1);
     return -ENOENT;
   }
-  DEBUG("Found tag \"%s\"", canon_path+1);
+  DEBUG("Found last tag in \"%s\"", canon_path+1);
 
   tdata dnode;
   if (tree_read(tagdata, (tblock*)&dnode)) {
@@ -629,7 +690,8 @@ static int insight_readlink(const char *path, char *buf, size_t size)
   }
 
   if (dnode.flags & DATA_FLAGS_SYNONYM) {
-    strncpy(buf, dnode.target, size);
+    unsigned int ssize=strlen(dnode.target);
+    strncpy(buf, dnode.target, MIN(size,ssize));
   } else {
     /* not a symlink */
     DEBUG("Requested tag \"%s\" is not a symlink.", canon_path+1);
@@ -665,6 +727,20 @@ static int insight_symlink(const char *from, const char *to)
   if (!finaldest) {
     PMSG(LOG_ERR, "IO error: Failed to generate repository path");
     return -EIO;
+  }
+
+  struct stat s;
+  if (!((stat(finaldest, &s) == -1) && (errno == ENOENT))) {
+    /* file exists or error finding it... */
+    if (errno) {
+      PMSG(LOG_ERR, "Some other error happened while stat()ing %s: %s", finaldest, strerror(errno));
+      ifree(finaldest);
+      return -EIO;
+    } else {
+      DEBUG("Tried to create a file that already exists");
+      ifree(finaldest);
+      return -EEXIST;
+    }
   }
 
   DEBUG("Final symlink call: symlink(\"%s\", \"%s\")", from, finaldest);

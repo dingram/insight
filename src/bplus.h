@@ -167,6 +167,7 @@ int     tree_map_keys     (const fileptr root, int (*func)(const char *, const f
 
 int inode_free_chain(fileptr block);
 int inode_insert(fileptr block, fileptr inode);
+int inode_remove(fileptr block, fileptr inode);
 int inode_put_all(fileptr block, fileptr *inodes, int count);
 int inode_get_all(fileptr block, fileptr *inodes, int max);
 fileptr *inode_get_all_recurse(fileptr block, int *count);

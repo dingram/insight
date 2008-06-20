@@ -1637,7 +1637,7 @@ int inode_insert(fileptr block, fileptr inode) {
     return EIO;
   }
 
-  /* insert node */
+  /* insert node (automatically sorted when saved) */
   inodes[count] = inode;
 
   /* save array back to target block */
@@ -1660,7 +1660,7 @@ int inode_insert(fileptr block, fileptr inode) {
  */
 int inode_remove(fileptr block, fileptr inode) {
   fileptr *inodes;
-  DEBUG("Inserting %08lX into inode list at block %lu", inode, block);
+  DEBUG("Remove %08lX from inode list at block %lu", inode, block);
   int count = inode_get_all(block, NULL, 0);
   DEBUG("Need %d inodes of space", count);
   if (count < 0) {
@@ -1668,29 +1668,43 @@ int inode_remove(fileptr block, fileptr inode) {
     return EIO;
   }
 
-
-  inodes = malloc((count+1)*sizeof(fileptr));
+  inodes = malloc(count*sizeof(fileptr));
   if (!inodes) {
     PMSG(LOG_ERR, "Failed to allocate memory for inodes array");
     return ENOMEM;
   }
-  if (inode_get_all(block, inodes, count+1)<0) {
+  if (inode_get_all(block, inodes, count)<0) {
     PMSG(LOG_ERR, "Failed to get inode array from block %lu", block);
-    free(inodes);
+    ifree(inodes);
     return EIO;
   }
 
-  /* insert node */
-  inodes[count] = inode;
+  /* find node */
+  /* TODO: make this binary search */
+  int i;
+  for (i=0; i<count; i++) {
+    if (inodes[i]==inode) break;
+  }
+
+  if (i>=count) {
+    /* not found */
+    ifree(inodes);
+    return ENOENT;
+  }
+
+  /* remove node */
+  while (i++<count-1) {
+    inodes[i-1]=inodes[i];
+  }
 
   /* save array back to target block */
-  if (inode_put_all(block, inodes, count+1)<0) {
+  if (inode_put_all(block, inodes, count-1)<0) {
     PMSG(LOG_ERR, "Failed to save inode array to block %lu", block);
-    free(inodes);
+    ifree(inodes);
     return EIO;
   }
 
-  free(inodes);
+  ifree(inodes);
   return 0;
 }
 
