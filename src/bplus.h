@@ -15,8 +15,8 @@
 #define INODECOUNT 124
 /** Maximum number of inodes in an inode block */
 #define INODE_MAX ((TREEBLOCK_SIZE - sizeof(short) - 2*sizeof(unsigned long))/sizeof(fileptr))
-/** Maximum length of a path reference in an inode tree data block, including terminating null */
-#define IDATA_MAX_LEN (TREEBLOCK_SIZE - sizeof(unsigned long))
+/** Maximum number of references in an inode data block */
+#define REF_MAX ((TREEBLOCK_SIZE - sizeof(short) - 2*sizeof(unsigned long))/sizeof(fileptr))
 
 /**
  * @defgroup MagicDefs Magic numbers
@@ -25,9 +25,10 @@
 #define MAGIC_SUPERBLOCK  0x00bab10c /**< Superblock (uber block) */
 #define MAGIC_TREENODE    0xce11b10c /**< Internal tree node (cell block) */
 #define MAGIC_DATANODE    0xda7ab10c /**< Tree data node (data block) */
-#define MAGIC_STRINGENTRY 0x7ec5b10c /**< String table entry (text block) [currently unused] */
 #define MAGIC_FREEBLOCK   0xf1eeb10c /**< Free block (free block) */
 #define MAGIC_INODEBLOCK  0x10deb10c /**< Inode block (inode block) */
+#define MAGIC_INODEDATA   0x1d7ab10c /**< Inode tree data block */
+#define MAGIC_STRINGENTRY 0x7ec5b10c /**< String table entry (text block) [currently unused] */
 #define MAGIC_INODETABLE  0x7ab1b10c /**< Inode translation table entry (table block) [currently unused] */
 /*@}*/
 
@@ -41,7 +42,9 @@
 /** Initialise a free block (zero it and set its magic number) */
 #define initFreeNode(n) do { bzero((n),sizeof(freeblock)); (n)->magic=MAGIC_FREEBLOCK; } while (0)
 /** Initialise a inode block (zero it and set its magic number) */
-#define initInodeBlock(n) do { bzero((n),sizeof(freeblock)); (n)->magic=MAGIC_INODEBLOCK; } while (0)
+#define initInodeBlock(n) do { bzero((n),sizeof(tinode)); (n)->magic=MAGIC_INODEBLOCK; } while (0)
+/** Initialise a inode data block (zero it and set its magic number) */
+#define initInodeDataBlock(n) do { bzero((n),sizeof(tidata)); (n)->magic=MAGIC_INODEDATA; } while (0)
 
 /** An address within a file */
 typedef unsigned long fileptr;
@@ -72,7 +75,8 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   fileptr free_head;          /**< Address of first free block (0 if none) */
   fileptr inode_limbo;        /**< Address of first block of the inode limbo area */
   unsigned long limbo_count;  /**< Number of inodes total in limbo */
-  char padding[TREEBLOCK_SIZE - (2*sizeof(unsigned long) + 2*sizeof(unsigned short) + 4*sizeof(fileptr))]; /**< Unused space */
+  fileptr inode_root;         /**< Address of the root of the inode tree */
+  char padding[TREEBLOCK_SIZE - (2*sizeof(unsigned long) + 2*sizeof(unsigned short) + 5*sizeof(fileptr))]; /**< Unused space */
 } tsblock;
 
 /** Node in the tree */
@@ -121,9 +125,11 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
 
 /** Data block in the inode tree */
 typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
-  unsigned long magic;        /**< Magic number */
-  char path[IDATA_MAX_LEN];   /**< Referenced path */
-} tddata;
+  unsigned long magic;        /**< Magic number 0x1d7ab10c */
+  unsigned short refcount;    /**< Number of references held in this block */
+  short unused;               /**< Unused */
+  fileptr refs[REF_MAX];      /**< List of references */
+} tidata;
 
 /** If a data node has this flag, it is a synonym for another node, and its \a
  * subkeys field is the address of the synonym target (another data block) */
@@ -149,18 +155,19 @@ int     tree_write        (fileptr block, tblock *data);
 int     tree_grow         (fileptr newsize);
 time_t  tree_get_mtime    ();
 fileptr tree_get_root     ();
+fileptr tree_get_iroot    ();
 int     tree_get_min      (tnode *node);
 int     tree_sub_get_min  (fileptr root, tnode *node);
 int     tree_key_count    ();
 int     tree_sub_key_count(fileptr root);
-int     tree_get          (tkey key, tdata *node);
-int     tree_sub_get      (fileptr root, tkey key, tdata *node);
+int     tree_get          (tkey key, tblock *node);
+int     tree_sub_get      (fileptr root, tkey key, tblock *node);
 fileptr tree_search       (tkey key);
 fileptr tree_sub_search   (fileptr root, tkey key);
 int     tree_remove       (tkey key);
 int     tree_sub_remove   (fileptr root, tkey key);
-fileptr tree_insert       (tkey key, tdata *data);
-fileptr tree_sub_insert   (fileptr node, tkey key, tdata *data);
+fileptr tree_insert       (tkey key, tblock *data);
+fileptr tree_sub_insert   (fileptr node, tkey key, tblock *data);
 int     tree_read_sb      (tsblock *super);
 int     tree_write_sb     (tsblock *super);
 int     tree_map_keys     (const fileptr root, int (*func)(const char *, const fileptr, void *), void *data);

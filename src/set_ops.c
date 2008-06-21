@@ -184,3 +184,50 @@ int set_intersect(void *set1, void *set2, void *out, size_t in1count, size_t in2
   }
   return oi;
 }
+
+/**
+ * Creates the difference of two sorted arrays by removing \a set2 from \a
+ * set1. The output array is guaranteed never to be larger than \a in1count.
+ *
+ * @param set1      The first set to be used.
+ * @param set2      The second set to be used (subtracted from the first).
+ * @param out       The output array.
+ * @param in1count  The number of items in \a set1.
+ * @param in2count  The number of items in \a set2.
+ * @param outmax    The maximum number of items in \a out.
+ * @param elem_size The size of an element in the set arrays.
+ * @param cmp       A comparison function that can be used on the array
+ * elements.
+ * @returns A negative error code, or the number of items written to the output
+ * array.
+ */
+int set_diff(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*)) {
+  if (!set1 || !set2 || !out || !outmax || !elem_size || !cmp) {
+    DEBUG("At least one argument was null or zero");
+    return -EINVAL;
+  }
+
+  if (!in1count || !in2count) {
+    DEBUG("No elements in an input array means no difference possible");
+    return 0;
+  }
+
+  size_t s1, oi=0;
+  for (s1=0; s1<in1count; s1++) {
+    size_t s2;
+    int eq;
+    eq=0;
+    /* check against each element in the "remove" list */
+    for (s2=0; s2<in2count; s2++) {
+      if (cmp((set1 + s1 * elem_size), (set2 + s2 * elem_size))==0) {
+        eq=1;
+        break;
+      }
+    }
+    if (!eq) {
+      memcpy((out + oi++ * elem_size), (set1 + s1 * elem_size), elem_size);
+    }
+  }
+
+  return oi;
+}

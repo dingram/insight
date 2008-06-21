@@ -143,8 +143,174 @@ static struct fuse_operations insight_oper = {
 static int usage_printed = 0;
 
 
-static int insight_getattr(const char *path, struct stat *stbuf)
-{
+static int limbo_search(fileptr inode) {
+  fileptr *inodes;
+  int i, count = inode_get_all(0, NULL, 0);
+  if (count>0) {
+    inodes = calloc(count, sizeof(fileptr));
+    inode_get_all(0, inodes, count);
+  } else if (count==0) {
+    /* can't be found if no inodes in list */
+    return 0;
+  } else if (count<0) {
+    DEBUG("Error calling inode_get_all(): %s", strerror(-count));
+    return count;
+  }
+
+  for (i=0; i<count; i++) {
+    if (inodes[i]==inode)
+      break;
+  }
+  ifree(inodes);
+  return (i<count)?(i+1):0;
+}
+
+static int attr_add(fileptr inode, fileptr attrid) {
+  DEBUG("attr_add(%08lx, %lu)", inode, attrid);
+  char s_hash[9];
+  sprintf(s_hash, "%08lX", inode);
+
+  /* if (inode in limbo) {           */
+  /*   remove from limbo;            */
+  /*   add to inode tree with attrid */
+  /*   add to attribute list         */
+  /* } else {                        */
+  /*   add attrid to inode tree      */
+  /*   add to attribute list         */
+  /* }                               */
+  return 0;
+}
+
+static int attr_del(fileptr inode, fileptr attrid) {
+  DEBUG("attr_del(%08lx, %lu)", inode, attrid);
+  char s_hash[9];
+  sprintf(s_hash, "%08lX", inode);
+
+  if (!attrid) {
+    DEBUG("Searching limbo");
+    int searchres=limbo_search(inode);
+
+    if (searchres<0) {
+      DEBUG("Error searching limbo");
+      return searchres;
+    }
+
+    /* if (inode in limbo)              */
+    if (searchres) {
+      DEBUG("Repos symlink therefore: %s", s_hash);
+
+      char *finaldest = gen_repos_path(s_hash, 1);
+      if (!finaldest) {
+        PMSG(LOG_ERR, "IO error: Failed to generate repository path");
+        return -EIO;
+      }
+
+      struct stat s;
+      if (stat(finaldest, &s) == -1) {
+        /* file does not exist or error finding it... */
+        if (errno==ENOENT) {
+          PMSG(LOG_ERR, "The repository symlink has vanished!");
+          ifree(finaldest);
+          return -EIO;
+        } else {
+          PMSG(LOG_ERR, "Error while stat()ing %s: %s", finaldest, strerror(errno));
+          ifree(finaldest);
+          return -EIO;
+        }
+      }
+
+
+      /* remove from limbo;             */
+      DEBUG("Removing inode from tree at root level (for now)");
+      if ((errno=inode_remove(0, inode))) {
+        PMSG(LOG_ERR, "IO error: Failed to remove inode from tree: %s\n", strerror(errno));
+        ifree(finaldest);
+        return -EIO;
+      }
+
+      /* unlink symlink                 */
+      DEBUG("Final unlink call: unlink(\"%s\")", finaldest);
+      if (unlink(finaldest)==-1) {
+        PMSG(LOG_ERR, "IO error: Symlink removal failed: %s", strerror(errno));
+        ifree(finaldest);
+        return -EIO;
+      }
+
+      ifree(finaldest);
+    } else {
+
+      DEBUG("Not in limbo");
+      return -ENOENT;
+    }
+
+  } else {
+    /* remove from attribute list     */
+    DEBUG("Removing from attribute list");
+    int res = inode_remove(attrid, inode);
+    if (res) {
+      DEBUG("Inode removal failed: %s", strerror(res));
+      if (res==ENOENT) res=EPERM;
+      return -res;
+    }
+
+    /* remove attrid from inode tree  */
+    tidata iblock;
+    fileptr piblock;
+
+    piblock = tree_sub_search(tree_get_iroot(), s_hash);
+
+    if (tree_read(piblock, (tblock*)&iblock)) {
+      PMSG(LOG_ERR, "IO error reading inode data block");
+      return -EIO;
+    }
+
+    /* find ref */
+    /* TODO: make this binary search */
+    int i;
+    for (i=0; i<iblock.refcount; i++) {
+      if (iblock.refs[i]==attrid) break;
+    }
+
+    if (i>=iblock.refcount) {
+      /* not found */
+      return -ENOENT;
+    }
+
+    /* remove node */
+    iblock.refcount--;
+    while (i++<iblock.refcount) {
+      iblock.refs[i-1]=iblock.refs[i];
+    }
+
+    /* if (inode attr list not empty) {   */
+    if (iblock.refcount) {
+      if (tree_write(piblock, (tblock*)&iblock)) {
+        PMSG(LOG_ERR, "IO error writing inode data block");
+        return -EIO;
+      }
+
+    } else {
+      DEBUG("Inode attribute list now empty");
+      /* remove entry from inode tree */
+      DEBUG("Removing entry from inode tree");
+      if ((errno=tree_sub_remove(tree_get_iroot(), s_hash))) {
+        PMSG(LOG_ERR, "Tree removal failed with error: %s\n", strerror(-res));
+        return -EIO;
+      }
+      /* insert inode into limbo list */
+      DEBUG("Inserting inode into limbo");
+      if ((errno=inode_insert(0, inode))) {
+        PMSG(LOG_ERR, "IO error: Failed to insert inode into limbo: %s\n", strerror(errno));
+        return -EIO;
+      }
+    }
+  }
+  return 0;
+}
+
+
+
+static int insight_getattr(const char *path, struct stat *stbuf) {
   DEBUG("Getattr called on path \"%s\"", path);
 
   DEBUG("Generating query tree");
@@ -248,10 +414,7 @@ static int insight_getattr(const char *path, struct stat *stbuf)
   return 0;
 }
 
-static int insight_readdir(const char *path, void *buf,
-               fuse_fill_dir_t filler, off_t offset,
-               struct fuse_file_info *fi)
-{
+static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
   (void) offset;
   (void) fi;
   tnode node;
@@ -423,8 +586,7 @@ static int insight_readdir(const char *path, void *buf,
   return 0;
 }
 
-static int insight_mkdir(const char *path, mode_t mode)
-{
+static int insight_mkdir(const char *path, mode_t mode) {
   (void) mode;
 
   char *newdir = strlast(path, '/');
@@ -487,7 +649,7 @@ static int insight_mkdir(const char *path, mode_t mode)
   DEBUG("About to insert \"%s\" into parent \"%s\"", newdir, parent_tag);
 
   initDataNode(&datan);
-  if (!tree_sub_insert(tree_root, newdir, &datan)) {
+  if (!tree_sub_insert(tree_root, newdir, (tblock*)&datan)) {
     PMSG(LOG_ERR, "Tree insertion failed\n");
     return -ENOSPC;
   }
@@ -496,8 +658,7 @@ static int insight_mkdir(const char *path, mode_t mode)
   return 0;
 }
 
-static int insight_rmdir(const char *path)
-{
+static int insight_rmdir(const char *path) {
   char *olddir = strlast(path, '/');
   char *dup = strdup(path);
   char *canon_parent = rindex(dup, '/');
@@ -570,31 +731,57 @@ static int insight_rmdir(const char *path)
   return 0;
 }
 
-static int insight_unlink(const char *path)
-{
+static int insight_unlink(const char *path) {
   unsigned long hash;
   char s_hash[9];
   char *finaldest;
+  char *canon_path = get_canonical_path(path+1);
 
-  DEBUG("Unlink \"%s\"", path);
+  DEBUG("Unlink \"%s\"", canon_path);
 
-  if (!path) {
+  if (!*canon_path) {
     FMSG(LOG_ERR, "Asked to unlink file with null path!");
     return -EINVAL;
   }
 
+#if 0
   if (strcount(path+1, '/')) {
     DEBUG("Can only unlink files at the top level... for now.");
     return -EPERM;
   }
+#endif
 
   /* IMPORTANT NOTE: rm is also called for symlinks but we don't deal with that
    * at all. Should check for tag existing first, and if it exists check its
    * flags and remove as appropriate. */
 
+  fileptr attrid=0;
+  int count;
+  char **bits = strsplit(canon_path, '/', &count);
+
   /* calculate an inode number for the path */
-  DEBUG("Hashing \"%s\"...", path+1);
-  hash = hash_path(path+1, strlen(path+1));
+  char *lastbit = strlast(canon_path, '/');
+  DEBUG("Hashing \"%s\"...", bits[count-1]);
+  hash = hash_path(bits[count-1], strlen(bits[count-1]));
+
+  if (count>1) {
+    DEBUG("Getting block for \"%s\"", bits[count-2]);
+    attrid = get_tag(bits[count-2]);
+    DEBUG("Block for \"%s\" is %lu", bits[count-2], attrid);
+  } else {
+    /* we're at the root */
+    attrid=0;
+  }
+
+  for (count--;count>=0; count--) {
+    ifree(bits[count]);
+  }
+  ifree(bits);
+
+  /* remove attribute */
+  int res = attr_del(hash, attrid);
+
+#if 0
   sprintf(s_hash, "%08lX", hash);
   DEBUG("Repos symlink therefore: %s", s_hash);
 
@@ -606,7 +793,7 @@ static int insight_unlink(const char *path)
 
   struct stat s;
   if (stat(finaldest, &s) == -1) {
-    /* file does not exists or error finding it... */
+    /* file does not exist or error finding it... */
     if (errno==ENOENT) {
       PMSG(LOG_ERR, "The repository symlink has vanished!");
       ifree(finaldest);
@@ -618,8 +805,6 @@ static int insight_unlink(const char *path)
     }
   }
 
-  DEBUG("Final unlink call: unlink(\"%s\")", finaldest);
-
   DEBUG("Removing inode from tree at root level (for now)");
   if ((errno=inode_remove(0, hash))) {
     PMSG(LOG_ERR, "IO error: Failed to remove inode from tree: %s\n", strerror(errno));
@@ -627,18 +812,20 @@ static int insight_unlink(const char *path)
     return -EIO;
   }
 
+  DEBUG("Final unlink call: unlink(\"%s\")", finaldest);
   if (unlink(finaldest)==-1) {
     PMSG(LOG_ERR, "IO error: Symlink removal failed: %s", strerror(errno));
     ifree(finaldest);
     return -EIO;
   }
+#endif
 
-  ifree(finaldest);
+  ifree(canon_path);
+
   return 0;
 }
 
-static int insight_mknod(const char *path, mode_t mode, dev_t rdev)
-{
+static int insight_mknod(const char *path, mode_t mode, dev_t rdev) {
   (void) path;
   (void) mode;
   (void) rdev;
@@ -647,8 +834,7 @@ static int insight_mknod(const char *path, mode_t mode, dev_t rdev)
   return -ENOTSUP;
 }
 
-static int insight_rename(const char *from, const char *to)
-{
+static int insight_rename(const char *from, const char *to) {
   (void) from;
   (void) to;
 
@@ -656,8 +842,7 @@ static int insight_rename(const char *from, const char *to)
   return -ENOTSUP;
 }
 
-static int insight_readlink(const char *path, char *buf, size_t size)
-{
+static int insight_readlink(const char *path, char *buf, size_t size) {
   char *canon_path = get_canonical_path(path);
   if (errno) {
     DEBUG("Error in get_canonical_path.");
@@ -701,8 +886,7 @@ static int insight_readlink(const char *path, char *buf, size_t size)
   return 0;
 }
 
-static int insight_symlink(const char *from, const char *to)
-{
+static int insight_symlink(const char *from, const char *to) {
   unsigned long hash;
   char s_hash[9];
   char *finaldest;
@@ -762,8 +946,7 @@ static int insight_symlink(const char *from, const char *to)
   return 0;
 }
 
-static int insight_link(const char *from, const char *to)
-{
+static int insight_link(const char *from, const char *to) {
   (void) from;
   (void) to;
 
@@ -771,8 +954,7 @@ static int insight_link(const char *from, const char *to)
   return -ENOTSUP;
 }
 
-static int insight_chmod(const char *path, mode_t mode)
-{
+static int insight_chmod(const char *path, mode_t mode) {
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Change mode of \"%s\" to %05o", canon_path, mode & 07777);
@@ -827,8 +1009,7 @@ static int insight_chmod(const char *path, mode_t mode)
   }
 }
 
-static int insight_chown(const char *path, uid_t uid, gid_t gid)
-{
+static int insight_chown(const char *path, uid_t uid, gid_t gid) {
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Change ownership of \"%s\" to %d:%d", canon_path, uid, gid);
@@ -855,8 +1036,7 @@ static int insight_chown(const char *path, uid_t uid, gid_t gid)
   }
 }
 
-static int insight_truncate(const char *path, off_t size)
-{
+static int insight_truncate(const char *path, off_t size) {
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Truncate \"%s\" to %lld bytes", canon_path, size);
@@ -885,8 +1065,7 @@ static int insight_truncate(const char *path, off_t size)
 
 #if FUSE_VERSION >= 26
 
-static int insight_utimens(const char *path, const struct timespec tv[2])
-{
+static int insight_utimens(const char *path, const struct timespec tv[2]) {
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Changing times of \"%s\"", path);
@@ -918,8 +1097,7 @@ static int insight_utimens(const char *path, const struct timespec tv[2])
 
 #else
 
-static int insight_utime(const char *path, struct utimbuf *buf)
-{
+static int insight_utime(const char *path, struct utimbuf *buf) {
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Changing times of \"%s\"", path);
@@ -948,8 +1126,7 @@ static int insight_utime(const char *path, struct utimbuf *buf)
 
 #endif
 
-static int insight_open(const char *path, struct fuse_file_info *fi)
-{
+static int insight_open(const char *path, struct fuse_file_info *fi) {
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Open on path \"%s\"", canon_path);
@@ -989,9 +1166,7 @@ static int insight_open(const char *path, struct fuse_file_info *fi)
   }
 }
 
-static int insight_read(const char *path, char *buf, size_t size,
-            off_t offset, struct fuse_file_info *fi)
-{
+static int insight_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Read on path \"%s\"", canon_path);
@@ -1029,9 +1204,7 @@ static int insight_read(const char *path, char *buf, size_t size,
   }
 }
 
-static int insight_write(const char *path, const char *buf, size_t size,
-             off_t offset, struct fuse_file_info *fi)
-{
+static int insight_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Write on path \"%s\"", canon_path);
@@ -1071,8 +1244,7 @@ static int insight_write(const char *path, const char *buf, size_t size,
 
 #if FUSE_VERSION >= 26
 
-static int insight_statvfs(const char *path, struct statvfs *stbuf)
-{
+static int insight_statvfs(const char *path, struct statvfs *stbuf) {
   (void) path;
   (void) stbuf;
 
@@ -1082,8 +1254,7 @@ static int insight_statvfs(const char *path, struct statvfs *stbuf)
 
 #else
 
-static int insight_statfs(const char *path, struct statfs *stbuf)
-{
+static int insight_statfs(const char *path, struct statfs *stbuf) {
   (void) path;
   (void) stbuf;
 
@@ -1092,8 +1263,7 @@ static int insight_statfs(const char *path, struct statfs *stbuf)
 }
 #endif
 
-static int insight_release(const char *path, struct fuse_file_info *fi)
-{
+static int insight_release(const char *path, struct fuse_file_info *fi) {
   (void) path;
   (void) fi;
 
@@ -1102,9 +1272,7 @@ static int insight_release(const char *path, struct fuse_file_info *fi)
   return 0;
 }
 
-static int insight_fsync(const char *path, int isdatasync,
-             struct fuse_file_info *fi)
-{
+static int insight_fsync(const char *path, int isdatasync, struct fuse_file_info *fi) {
   (void) path;
   (void) isdatasync;
   (void) fi;
@@ -1113,8 +1281,7 @@ static int insight_fsync(const char *path, int isdatasync,
   return -EPERM;
 }
 
-static int insight_access(const char *path, int mode)
-{
+static int insight_access(const char *path, int mode) {
   (void) path;
   (void) mode;
 
@@ -1123,14 +1290,12 @@ static int insight_access(const char *path, int mode)
 }
 
 #if FUSE_VERSION >= 26
-static void *insight_init(struct fuse_conn_info *conn)
-{
+static void *insight_init(struct fuse_conn_info *conn) {
   (void) conn;
   return NULL;
 }
 #else
-static void *insight_init(void)
-{
+static void *insight_init(void) {
   return NULL;
 }
 #endif
@@ -1140,8 +1305,7 @@ static void *insight_init(void)
  *
  * @param arg An argument passed by FUSE. Ignored.
  */
-void insight_destroy(void *arg)
-{
+void insight_destroy(void *arg) {
   (void) arg;
 	PMSG(LOG_ERR, "Cleaning up and exiting");
   tree_close();

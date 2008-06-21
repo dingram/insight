@@ -741,6 +741,16 @@ fileptr tree_get_root() {
 }
 
 /**
+ * Get the inode tree root index.
+ *
+ * @returns The index of the root of the inode tree, as given by the
+ * superblock.
+ */
+fileptr tree_get_iroot() {
+  return tree_sb->inode_root;
+}
+
+/**
  * Get the <strong>node</strong> block associated with the minimum key in the
  * tree.
  *
@@ -802,7 +812,7 @@ int tree_sub_get_min(fileptr root, tnode *node) {
  * @param[out] node A pointer to the data block associated with \a key.
  * @returns See tree_sub_get()
  */
-int tree_get(char *key, tdata *node) {
+int tree_get(char *key, tblock *node) {
   return tree_sub_get(tree_sb->root_index, key, node);
 }
 
@@ -817,11 +827,11 @@ int tree_get(char *key, tdata *node) {
  * @retval ENOENT The key was not found in the tree.
  * @retval EIO There was an I/O error while reading the block.
  */
-int tree_sub_get(fileptr root, char *key, tdata *node) {
+int tree_sub_get(fileptr root, char *key, tblock *node) {
   fileptr dblock = tree_sub_search(root, key);
 
   if (!dblock) return ENOENT;
-  if (tree_read(dblock, (tblock*)node))
+  if (tree_read(dblock, node))
     return EIO;
   return 0;
 }
@@ -1050,7 +1060,7 @@ static int tree_insert_recurse (fileptr root, char **key, fileptr *ptr) {
 /*
  * insert a data block into the tree with the given key
  */
-fileptr tree_insert (tkey key, tdata *data) {
+fileptr tree_insert (tkey key, tblock *data) {
   DEBUG("Inserting into root tree with key \"%s\"", key);
   return tree_sub_insert(0, key, data);
 }
@@ -1061,10 +1071,11 @@ fileptr tree_insert (tkey key, tdata *data) {
  *
  * @param root The index of the \b DATA node
  */
-fileptr tree_sub_insert(fileptr root, tkey key, tdata *data) {
+fileptr tree_sub_insert(fileptr root, tkey key, tblock *data) {
   fileptr newnode;
   fileptr ptr, split;
   tdata dataroot;
+  /* TODO: replace with strndup() */
   char *ikey = malloc(sizeof(char)*TREEKEY_SIZE); /* TODO: check for failure */
 
   DEBUG("Copying key to temp location");
@@ -1075,6 +1086,10 @@ fileptr tree_sub_insert(fileptr root, tkey key, tdata *data) {
     initDataNode(&dataroot);
     dataroot.subkeys=tree_sb->root_index;
     root=0;
+  } else if (root==tree_sb->inode_root) {
+    DEBUG("Faking data node");
+    initDataNode(&dataroot);
+    dataroot.subkeys=tree_sb->inode_root;
   } else {
     DEBUG("Fetching block %lu", root);
     errno=0;
@@ -1141,6 +1156,9 @@ fileptr tree_sub_insert(fileptr root, tkey key, tdata *data) {
       tree_write(dataroot.subkeys, (tblock*)&newroot);
       if (!root) {
         tree_sb->root_index=dataroot.subkeys;
+        tree_write_sb(tree_sb);
+      } else if (root==tree_sb->inode_root) {
+        tree_sb->inode_root=dataroot.subkeys;
         tree_write_sb(tree_sb);
       } else {
         tree_write(root, (tblock*)&dataroot);
