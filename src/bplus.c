@@ -27,7 +27,7 @@
  * @sa tree_write(), tree_format_free(), tree_open()
  */
 static int tree_format () {
-  tnode   root;
+  tnode root;
   int result;
 
   DEBUG("Entered tree_format()");
@@ -47,6 +47,7 @@ static int tree_format () {
   tree_sb->magic=MAGIC_SUPERBLOCK;
   tree_sb->version=TREE_FILE_VERSION;
   tree_sb->root_index=1;
+  tree_sb->inode_root=2;
   tree_sb->max_size=DEFAULT_BLOCKS;
   tree_sb->free_head=0;
 
@@ -54,14 +55,18 @@ static int tree_format () {
   root.leaf=1;
   root.keycount=0;
 
-  DEBUG("Writing root block");
+  DEBUG("Writing root blocks");
   if ((result=tree_write(1, (tblock*)&root))) {
-    PMSG(LOG_ERR, "Problem writing root: %s", strerror(errno));
+    PMSG(LOG_ERR, "Problem writing tree root: %s", strerror(errno));
+    return errno;
+  }
+  if ((result=tree_write(2, (tblock*)&root))) {
+    PMSG(LOG_ERR, "Problem writing inode root: %s", strerror(errno));
     return errno;
   }
 
   /* now let's initialise some space - this also writes the superblock */
-  return tree_format_free(2, DEFAULT_BLOCKS - 1); /* Remove one to account for the root block */
+  return tree_format_free(3, DEFAULT_BLOCKS - 2); /* Remove two to account for the root blocks */
 }
 
 /**
@@ -788,7 +793,11 @@ int tree_sub_get_min(fileptr root, tnode *node) {
   if (node->magic == MAGIC_DATANODE) {
     DEBUG("Starting search at data node; using subkeys");
     root=((tdata*)node)->subkeys;
-    return tree_sub_get_min(root, node);
+    if (root) {
+      return tree_sub_get_min(root, node);
+    } else {
+      return ENOENT;
+    }
   } else if (node->magic != MAGIC_TREENODE) {
     PMSG(LOG_ERR, "Invalid magic number (%lX) for block %lu", node->magic, root);
     return EBADF;
@@ -856,9 +865,8 @@ fileptr tree_sub_search(fileptr root, char *key) {
   errno=0;
   DEBUG("Searching for \"%s\" from block %lu", key, root);
   if (!root) {
-    PMSG(LOG_ERR, "Root is zero; nowhere to start");
-    errno=ENOENT;
-    return 0;
+    PMSG(LOG_ERR, "Root is zero; starting again at root");
+    return tree_sub_search(tree_sb->root_index, key);
   }
   index=0;
   for(;;) {
@@ -870,7 +878,12 @@ fileptr tree_sub_search(fileptr root, char *key) {
     if (node.magic == MAGIC_DATANODE) {
       DEBUG("Starting search at data node; using subkeys");
       root=((tdata*)&node)->subkeys;
-      return tree_sub_search(root, key);
+      if (root) {
+        return tree_sub_search(root, key);
+      } else {
+        errno=ENOENT;
+        return 0;
+      }
     } else if (node.magic != MAGIC_TREENODE) {
       PMSG(LOG_ERR, "Invalid magic number (%lX)", node.magic);
       errno=EBADF;
@@ -1686,11 +1699,13 @@ int inode_remove(fileptr block, fileptr inode) {
     return EIO;
   }
 
+  DEBUG("Allocating space");
   inodes = malloc(count*sizeof(fileptr));
   if (!inodes) {
     PMSG(LOG_ERR, "Failed to allocate memory for inodes array");
     return ENOMEM;
   }
+  DEBUG("Retrieving inodes");
   if (inode_get_all(block, inodes, count)<0) {
     PMSG(LOG_ERR, "Failed to get inode array from block %lu", block);
     ifree(inodes);
@@ -1699,28 +1714,33 @@ int inode_remove(fileptr block, fileptr inode) {
 
   /* find node */
   /* TODO: make this binary search */
+  DEBUG("Finding target");
   int i;
   for (i=0; i<count; i++) {
     if (inodes[i]==inode) break;
   }
 
   if (i>=count) {
+    DEBUG("Target lost");
     /* not found */
     ifree(inodes);
     return ENOENT;
   }
+  DEBUG("Eliminating target at position %d", i);
 
   /* remove node */
   while (i++<count-1) {
     inodes[i-1]=inodes[i];
   }
 
+  DEBUG("Saving array back to target %lu", block);
   /* save array back to target block */
   if (inode_put_all(block, inodes, count-1)<0) {
     PMSG(LOG_ERR, "Failed to save inode array to block %lu", block);
     ifree(inodes);
     return EIO;
   }
+  DEBUG("Done!");
 
   ifree(inodes);
   return 0;
@@ -1742,6 +1762,8 @@ int inode_remove(fileptr block, fileptr inode) {
 int inode_put_all(fileptr block, fileptr *inodes, int count) {
   tdata datablock;
   int curinode=0;
+
+  DEBUG("inode_put_all(block: %lu, inodes: %lu, count: %d)", block, inodes, count);
 
   if (!inodes) {
     PMSG(LOG_ERR, "No inode list given");

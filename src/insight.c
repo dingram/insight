@@ -37,6 +37,7 @@
 #include <path_helpers.h>
 #include <string_helpers.h>
 #include <query_engine.h>
+#include <set_ops.h>
 
 static int   insight_getattr(const char *path, struct stat *stbuf);
 static int   insight_readlink(const char *path, char *buf, size_t size);
@@ -166,18 +167,81 @@ static int limbo_search(fileptr inode) {
 }
 
 static int attr_add(fileptr inode, fileptr attrid) {
-  DEBUG("attr_add(%08lx, %lu)", inode, attrid);
+  DEBUG("attr_add(inode: %08lx, attrid: %lu)", inode, attrid);
   char s_hash[9];
   sprintf(s_hash, "%08lX", inode);
 
-  /* if (inode in limbo) {           */
-  /*   remove from limbo;            */
-  /*   add to inode tree with attrid */
-  /*   add to attribute list         */
-  /* } else {                        */
-  /*   add attrid to inode tree      */
-  /*   add to attribute list         */
-  /* }                               */
+  if (!attrid) {
+    DEBUG("Cannot add null attribute");
+    return -ENOENT;
+  }
+
+  DEBUG("Searching limbo");
+  int searchres=limbo_search(inode);
+
+  if (searchres<0) {
+    DEBUG("Error searching limbo");
+    return searchres;
+  }
+
+  /* if (inode in limbo)             */
+  if (searchres) {
+    /* remove from limbo;            */
+    DEBUG("Removing inode from limbo");
+    if ((errno=inode_remove(0, inode))) {
+      PMSG(LOG_ERR, "IO error: Failed to remove inode from limbo: %s", strerror(errno));
+      return -EIO;
+    }
+
+    /* add to inode tree with attrid */
+    DEBUG("Adding entry to inode tree");
+    tidata iblock;
+    initInodeDataBlock(&iblock);
+    if (!tree_sub_insert(tree_get_iroot(), s_hash, (tblock*)&iblock)) {
+      PMSG(LOG_ERR, "Tree insertion failed");
+      return -ENOSPC;
+    }
+
+    /* add to attribute list         */
+    DEBUG("Adding to attribute list");
+    int res = inode_insert(attrid, inode);
+    if (res) {
+      DEBUG("Inode addition failed: %s", strerror(res));
+      if (res==ENOENT) res=EPERM;
+      return -res;
+    }
+  } else {
+    /* add attrid to inode tree      */
+    tidata iblock;
+    fileptr piblock;
+
+    DEBUG("Adding to inode tree");
+    piblock = tree_sub_search(tree_get_iroot(), s_hash);
+
+    if (tree_read(piblock, (tblock*)&iblock)) {
+      PMSG(LOG_ERR, "IO error reading inode data block");
+      return -EIO;
+    }
+
+    iblock.refs[iblock.refcount] = inode;
+    iblock.refcount++;
+
+    qsort(iblock.refs, iblock.refcount, sizeof(fileptr), inodecmp);
+
+    if (tree_write(piblock, (tblock*)&iblock)) {
+      PMSG(LOG_ERR, "IO error writing inode data block");
+      return -EIO;
+    }
+
+    /* add to attribute list         */
+    DEBUG("Adding to attribute list");
+    int res = inode_insert(attrid, inode);
+    if (res) {
+      DEBUG("Inode insertion failed: %s", strerror(res));
+      if (res==ENOENT) res=EPERM;
+      return -res;
+    }
+  }
   return 0;
 }
 
@@ -223,7 +287,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
       /* remove from limbo;             */
       DEBUG("Removing inode from tree at root level (for now)");
       if ((errno=inode_remove(0, inode))) {
-        PMSG(LOG_ERR, "IO error: Failed to remove inode from tree: %s\n", strerror(errno));
+        PMSG(LOG_ERR, "IO error: Failed to remove inode from tree: %s", strerror(errno));
         ifree(finaldest);
         return -EIO;
       }
@@ -252,62 +316,70 @@ static int attr_del(fileptr inode, fileptr attrid) {
       if (res==ENOENT) res=EPERM;
       return -res;
     }
+    DEBUG("Removed.");
 
     /* remove attrid from inode tree  */
+    DEBUG("Removing attribute ref from inode tree");
     tidata iblock;
     fileptr piblock;
 
-    piblock = tree_sub_search(tree_get_iroot(), s_hash);
+    DEBUG("Fetching inode tree data block");
+    if (tree_get_iroot()) {
+      piblock = tree_sub_search(tree_get_iroot(), s_hash);
 
-    if (tree_read(piblock, (tblock*)&iblock)) {
-      PMSG(LOG_ERR, "IO error reading inode data block");
-      return -EIO;
-    }
-
-    /* find ref */
-    /* TODO: make this binary search */
-    int i;
-    for (i=0; i<iblock.refcount; i++) {
-      if (iblock.refs[i]==attrid) break;
-    }
-
-    if (i>=iblock.refcount) {
-      /* not found */
-      return -ENOENT;
-    }
-
-    /* remove node */
-    iblock.refcount--;
-    while (i++<iblock.refcount) {
-      iblock.refs[i-1]=iblock.refs[i];
-    }
-
-    /* if (inode attr list not empty) {   */
-    if (iblock.refcount) {
-      if (tree_write(piblock, (tblock*)&iblock)) {
-        PMSG(LOG_ERR, "IO error writing inode data block");
+      if (tree_read(piblock, (tblock*)&iblock)) {
+        PMSG(LOG_ERR, "IO error reading inode data block");
         return -EIO;
       }
 
-    } else {
-      DEBUG("Inode attribute list now empty");
-      /* remove entry from inode tree */
-      DEBUG("Removing entry from inode tree");
-      if ((errno=tree_sub_remove(tree_get_iroot(), s_hash))) {
-        PMSG(LOG_ERR, "Tree removal failed with error: %s\n", strerror(-res));
-        return -EIO;
+      /* find ref */
+      DEBUG("Finding ref...");
+      /* TODO: make this binary search */
+      int i;
+      for (i=0; i<iblock.refcount; i++) {
+        if (iblock.refs[i]==attrid) break;
       }
-      /* insert inode into limbo list */
-      DEBUG("Inserting inode into limbo");
-      if ((errno=inode_insert(0, inode))) {
-        PMSG(LOG_ERR, "IO error: Failed to insert inode into limbo: %s\n", strerror(errno));
-        return -EIO;
+
+      if (i>=iblock.refcount) {
+        /* not found */
+        return -ENOENT;
+      }
+
+      DEBUG("Removing node...");
+      /* remove node */
+      iblock.refcount--;
+      while (i++<iblock.refcount) {
+        iblock.refs[i-1]=iblock.refs[i];
+      }
+
+      /* if (inode attr list not empty) {   */
+      if (iblock.refcount) {
+        if (tree_write(piblock, (tblock*)&iblock)) {
+          PMSG(LOG_ERR, "IO error writing inode data block");
+          return -EIO;
+        }
+
+      } else {
+        DEBUG("Inode attribute list now empty");
+        /* remove entry from inode tree */
+        DEBUG("Removing entry from inode tree");
+        if ((errno=tree_sub_remove(tree_get_iroot(), s_hash))) {
+          PMSG(LOG_ERR, "Tree removal failed with error: %s", strerror(-res));
+          return -EIO;
+        }
+        /* insert inode into limbo list */
+        DEBUG("Inserting inode into limbo");
+        if ((errno=inode_insert(0, inode))) {
+          PMSG(LOG_ERR, "IO error: Failed to insert inode into limbo: %s", strerror(errno));
+          return -EIO;
+        }
       }
     }
   }
+
+  DEBUG("All done.");
   return 0;
 }
-
 
 
 static int insight_getattr(const char *path, struct stat *stbuf) {
@@ -466,31 +538,34 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
   filler(buf, "..", NULL, 0);
   DEBUG("Managed ..");
 
-  int inodecount, neg;
-  DEBUG("Fetching inode list");
-  fileptr *inodelist = query_to_inodes(q, &inodecount, &neg);
+  /* if subtag indicator then no files should be listed */
+  if (!*last_tag) {
+    int inodecount, neg;
+    DEBUG("Fetching inode list");
+    fileptr *inodelist = query_to_inodes(q, &inodecount, &neg);
 
-  DEBUG("query_to_inodes() has returned");
-  if (!inodelist) {
-    PMSG(LOG_ERR, "Error fetching inode list from query tree");
-    qtree_free(&q, 1);
-    ifree(last_tag);
-    return -EIO;
-  }
-  DEBUG("%d inodes to consider", inodecount);
-
-  for (i=0; i<inodecount; i++) {
-    char *str = basename_from_inode(inodelist[i]);
-    if (str) {
-      DEBUG("Adding filename \"%s\" to listing", str);
-      filler(buf, str, NULL, 0);
-    } else {
-      FMSG(LOG_ERR, "Error getting filename for inode %08lX", inodelist[i]);
+    DEBUG("query_to_inodes() has returned");
+    if (!inodelist) {
+      PMSG(LOG_ERR, "Error fetching inode list from query tree");
+      qtree_free(&q, 1);
+      ifree(last_tag);
+      return -EIO;
     }
-  }
+    DEBUG("%d inodes to consider", inodecount);
 
-  DEBUG("Freeing inode array");
-  ifree(inodelist);
+    for (i=0; i<inodecount; i++) {
+      char *str = basename_from_inode(inodelist[i]);
+      if (str) {
+        DEBUG("Adding filename \"%s\" to listing", str);
+        filler(buf, str, NULL, 0);
+      } else {
+        FMSG(LOG_ERR, "Error getting filename for inode %08lX", inodelist[i]);
+      }
+    }
+
+    DEBUG("Freeing inode array");
+    ifree(inodelist);
+  }
 
   DEBUG("Freeing query tree...");
   qtree_free(&q, 1);
@@ -498,7 +573,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
   /* And now for directories */
 
   if (tree_sub_get_min(tree_root, &node)) {
-    PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed\n");
+    PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed");
     ifree(last_tag);
     return -EIO;
   }
@@ -507,7 +582,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     if (*last_tag)
       DEBUG("No subtags");
     else
-      PMSG(LOG_ERR, "Something went very, very wrong\n");
+      PMSG(LOG_ERR, "Something went very, very wrong");
     ifree(last_tag);
     return 0;
   }
@@ -518,13 +593,16 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     DEBUG("Getting last fragment");
     char *lastbit = strlast(canon_path, '/');
     tnode n;
+
+    n.magic=0;
     /* but only if it actually has subkeys */
     DEBUG("Getting tag for \"%s\"", lastbit);
     tree_root=get_tag(lastbit);
 
     DEBUG("Calling tree_sub_get_min(%lu)", tree_root);
-    if (tree_sub_get_min(tree_root, &n)) {
-      PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed\n");
+    int res=tree_sub_get_min(tree_root, &n);
+    if (res && res != ENOENT) {
+      PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed: %s", strerror(errno));
       ifree(lastbit);
       ifree(last_tag);
       return -EIO;
@@ -570,7 +648,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
       }
     }
     if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
-      PMSG(LOG_ERR, "I/O error reading block\n");
+      PMSG(LOG_ERR, "I/O error reading block");
       ifree(last_tag);
       return -EIO;
     }
@@ -600,7 +678,7 @@ static int insight_mkdir(const char *path, mode_t mode) {
     canon_parent++;
 
   if (strcmp(newdir, INSIGHT_SUBKEY_IND)==0) {
-    PMSG(LOG_WARN, "Cannot create directories named \"%s\"\n", INSIGHT_SUBKEY_IND);
+    PMSG(LOG_WARN, "Cannot create directories named \"%s\"", INSIGHT_SUBKEY_IND);
     return -EPERM;
   }
 
@@ -650,7 +728,7 @@ static int insight_mkdir(const char *path, mode_t mode) {
 
   initDataNode(&datan);
   if (!tree_sub_insert(tree_root, newdir, (tblock*)&datan)) {
-    PMSG(LOG_ERR, "Tree insertion failed\n");
+    PMSG(LOG_ERR, "Tree insertion failed");
     return -ENOSPC;
   }
   DEBUG("Successfully inserted \"%s\" into parent \"%s\"", newdir, parent_tag);
@@ -670,7 +748,7 @@ static int insight_rmdir(const char *path) {
     canon_parent++;
 
   if (strcmp(olddir, INSIGHT_SUBKEY_IND)==0) {
-    PMSG(LOG_WARN, "Cannot remove directories named \"%s\"\n", INSIGHT_SUBKEY_IND);
+    PMSG(LOG_WARN, "Cannot remove directories named \"%s\"", INSIGHT_SUBKEY_IND);
     return -EPERM;
   }
 
@@ -720,10 +798,10 @@ static int insight_rmdir(const char *path) {
   int res=tree_sub_remove(tree_root, olddir);
 
   if (res<0) {
-    PMSG(LOG_ERR, "Tree removal failed with error: %s\n", strerror(-res));
+    PMSG(LOG_ERR, "Tree removal failed with error: %s", strerror(-res));
     return res;
   } else if (res) {
-    PMSG(LOG_ERR, "IO error: Tree removal failed\n");
+    PMSG(LOG_ERR, "IO error: Tree removal failed");
     return -EIO;
   }
   DEBUG("Successfully removed \"%s\" from parent \"%s\"", olddir, parent_tag);
@@ -733,9 +811,9 @@ static int insight_rmdir(const char *path) {
 
 static int insight_unlink(const char *path) {
   unsigned long hash;
-  char s_hash[9];
-  char *finaldest;
   char *canon_path = get_canonical_path(path+1);
+
+  /* TODO: check paths are valid and exist! */
 
   DEBUG("Unlink \"%s\"", canon_path);
 
@@ -744,12 +822,10 @@ static int insight_unlink(const char *path) {
     return -EINVAL;
   }
 
-#if 0
-  if (strcount(path+1, '/')) {
-    DEBUG("Can only unlink files at the top level... for now.");
+  if (strcount(canon_path+1, '/')>1) {
+    DEBUG("Only makes sense to remove from single-level directories");
     return -EPERM;
   }
-#endif
 
   /* IMPORTANT NOTE: rm is also called for symlinks but we don't deal with that
    * at all. Should check for tag existing first, and if it exists check its
@@ -760,7 +836,6 @@ static int insight_unlink(const char *path) {
   char **bits = strsplit(canon_path, '/', &count);
 
   /* calculate an inode number for the path */
-  char *lastbit = strlast(canon_path, '/');
   DEBUG("Hashing \"%s\"...", bits[count-1]);
   hash = hash_path(bits[count-1], strlen(bits[count-1]));
 
@@ -781,46 +856,13 @@ static int insight_unlink(const char *path) {
   /* remove attribute */
   int res = attr_del(hash, attrid);
 
-#if 0
-  sprintf(s_hash, "%08lX", hash);
-  DEBUG("Repos symlink therefore: %s", s_hash);
-
-  finaldest = gen_repos_path(s_hash, 1);
-  if (!finaldest) {
-    PMSG(LOG_ERR, "IO error: Failed to generate repository path");
-    return -EIO;
+  if (res<0) {
+    DEBUG("Error deleting attribute");
+    return res;
   }
 
-  struct stat s;
-  if (stat(finaldest, &s) == -1) {
-    /* file does not exist or error finding it... */
-    if (errno==ENOENT) {
-      PMSG(LOG_ERR, "The repository symlink has vanished!");
-      ifree(finaldest);
-      return -EIO;
-    } else {
-      PMSG(LOG_ERR, "Error while stat()ing %s: %s", finaldest, strerror(errno));
-      ifree(finaldest);
-      return -EIO;
-    }
-  }
-
-  DEBUG("Removing inode from tree at root level (for now)");
-  if ((errno=inode_remove(0, hash))) {
-    PMSG(LOG_ERR, "IO error: Failed to remove inode from tree: %s\n", strerror(errno));
-    ifree(finaldest);
-    return -EIO;
-  }
-
-  DEBUG("Final unlink call: unlink(\"%s\")", finaldest);
-  if (unlink(finaldest)==-1) {
-    PMSG(LOG_ERR, "IO error: Symlink removal failed: %s", strerror(errno));
-    ifree(finaldest);
-    return -EIO;
-  }
-#endif
-
-  ifree(canon_path);
+  /* XXX: segfaults */
+  /* ifree(canon_path); */
 
   return 0;
 }
@@ -937,7 +979,7 @@ static int insight_symlink(const char *from, const char *to) {
 
   DEBUG("Inserting inode into tree at root level (for now)");
   if ((errno=inode_insert(0, hash))) {
-    PMSG(LOG_ERR, "IO error: Failed to insert inode into tree: %s\n", strerror(errno));
+    PMSG(LOG_ERR, "IO error: Failed to insert inode into tree: %s", strerror(errno));
     ifree(finaldest);
     return -EIO;
   }
@@ -947,11 +989,55 @@ static int insight_symlink(const char *from, const char *to) {
 }
 
 static int insight_link(const char *from, const char *to) {
-  (void) from;
-  (void) to;
+  unsigned long hash;
+  char *canon_from = get_canonical_path(from+1);
+  char *canon_to   = get_canonical_path(to)+1;
 
-  DEBUG("Create hard link from \"%s\" to \"%s\"", from, to);
-  return -ENOTSUP;
+  /* TODO: check paths are valid and exist! */
+
+  DEBUG("Create hard link from \"%s\" to \"%s\"", canon_from, canon_to);
+
+  if (!*canon_from || !*canon_to) {
+    FMSG(LOG_ERR, "Asked to link file with null from/to path!");
+    return -EINVAL;
+  }
+
+  if (strcount(canon_to+1, '/') != 1) {
+    DEBUG("Only makes sense to apply a single tag at a time, and must have at least one!");
+    return -EPERM;
+  }
+
+  char *last_bit = strlast(canon_from, '/');
+  /* calculate an inode number for the path */
+  DEBUG("Hashing \"%s\"...", last_bit);
+  hash = hash_path(last_bit, strlen(last_bit));
+  ifree(canon_from);
+
+  int count;
+  char **bits = strsplit(canon_to, '/', &count);
+
+  DEBUG("Getting block for \"%s\"", bits[count-2]);
+  fileptr attrid = get_tag(bits[count-2]);
+  DEBUG("Block for \"%s\" is %lu", bits[count-2], attrid);
+
+  for (count--;count>=0; count--) {
+    ifree(bits[count]);
+  }
+  ifree(bits);
+
+  /* isnert attribute */
+  int res = attr_add(hash, attrid);
+
+  if (res<0) {
+    DEBUG("Error inserting attribute");
+    return res;
+  }
+
+  /* XXX: segfaults */
+  /* ifree(canon_from); */
+  /* ifree(canon_to); */
+
+  return 0;
 }
 
 static int insight_chmod(const char *path, mode_t mode) {
@@ -985,7 +1071,7 @@ static int insight_chmod(const char *path, mode_t mode) {
 
     tdata dblock;
     if (tree_read(tagblock, (tblock*)&dblock)) {
-      PMSG(LOG_ERR, "I/O error reading block\n");
+      PMSG(LOG_ERR, "I/O error reading block");
       ifree(last_tag);
       return -EIO;
     }
@@ -995,7 +1081,7 @@ static int insight_chmod(const char *path, mode_t mode) {
       CLEAR_FLAG(dblock.flags, DATA_FLAGS_NOSUB);
     }
     if (tree_write(tagblock, (tblock*)&dblock)) {
-      PMSG(LOG_ERR, "I/O error writing block\n");
+      PMSG(LOG_ERR, "I/O error writing block");
       ifree(last_tag);
       return -EIO;
     }
