@@ -251,15 +251,87 @@ static int attr_add(fileptr inode, fileptr attrid) {
   return 0;
 }
 
-static int attr_addbyname(fileptr inode, char *attr) {
+static int attr_addbyname(fileptr inode, const char *attr) {
   if (!attr || !*attr) {
-    return 0;
+    return -EINVAL;
   }
   fileptr attrid = get_tag(attr);
   if (!attrid) {
     return -ENOENT;
   }
   return attr_add(inode, attrid);
+}
+
+static int attr_addbyname_rec(fileptr inode, const char *attr) {
+  if (!attr || !*attr) {
+    return -EINVAL;
+  }
+
+  fileptr attrid = get_tag(attr);
+  if (attrid) {
+    /* easy case - tag exists */
+    return attr_add(inode, attrid);
+  }
+
+  size_t len = strlen(attr);
+  char *curtag=calloc(len+1, sizeof(char)); /* TODO: check for failure */
+  strcpy(curtag, attr);
+
+  /* loop backwards to find the closest parent tag that doesn't exist */
+  /* i.e. check foo`bar`qux then foo`bar then foo */
+  DEBUG("Checking \"%s\"", curtag);
+  int found=1;
+  while (!(attrid=get_tag(curtag))) {
+    char *t = rindex(curtag, INSIGHT_SUBKEY_SEP_C);
+    if (t) {
+      *t='\0';
+    } else {
+      found=0;
+      break;
+    }
+    DEBUG("Checking \"%s\"", curtag);
+  }
+
+  if (!attrid) {
+    attrid = tree_get_root();
+  }
+
+  do {
+    /* if found is set then curtag exists... so we skip it and go on to its child */
+    if (!found) {
+      tdata datan;
+
+      /* create curtag */
+      DEBUG("Creating tag \"%s\" as a child of block %lu", curtag, attrid);
+
+      char *the_tag = strlast(curtag, INSIGHT_SUBKEY_SEP_C);
+      initDataNode(&datan);
+      if (!tree_sub_insert(attrid, the_tag, (tblock*)&datan)) {
+        PMSG(LOG_ERR, "Tree insertion failed");
+        return -ENOSPC;
+      }
+      DEBUG("Successfully inserted \"%s\" into parent", curtag);
+      ifree(the_tag);
+
+      attrid = get_tag(curtag);
+      if (!attrid) {
+        PMSG(LOG_ERR, "Could not find the tag I just created!");
+        return -EIO;
+      }
+    } else {
+      found=0;
+    }
+    /* if we're done, exit... */
+    if (strlen(curtag)==len) break;
+    /* advance string */
+    curtag[strlen(curtag)]=INSIGHT_SUBKEY_SEP_C;
+  } while (strlen(curtag) <= len);
+
+  DEBUG("Done creating tags");
+
+
+  ifree(curtag);
+  return attr_addbyname(inode, attr);
 }
 
 static int attr_del(fileptr inode, fileptr attrid) {
@@ -326,7 +398,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
 
   } else {
     /* remove from attribute list     */
-    DEBUG("Removing from attribute list");
+    DEBUG("Removing from inode list of attribute %08lx", attrid);
     int res = inode_remove(attrid, inode);
     if (res) {
       DEBUG("Inode removal failed: %s", strerror(res));
@@ -359,6 +431,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
 
       if (i>=iblock.refcount) {
         /* not found */
+        DEBUG("Could not find ref!");
         return -ENOENT;
       }
 
@@ -396,6 +469,17 @@ static int attr_del(fileptr inode, fileptr attrid) {
 
   DEBUG("All done.");
   return 0;
+}
+
+static int attr_delbyname(fileptr inode, const char *attr) {
+  if (!attr || !*attr) {
+    return -EINVAL;
+  }
+  fileptr attrid = get_tag(attr);
+  if (!attrid) {
+    return -ENODATA;
+  }
+  return attr_del(inode, attrid);
 }
 
 
@@ -548,7 +632,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
   fileptr tree_root=tree_get_root();
 
   if (*last_tag && (tree_root=get_tag(last_tag))==0) {
-    DEBUG("Tag \"%s\" not found", last_tag);
+    DEBUG("Tag \"%s\" not found\n", last_tag);
     qtree_free(&q, 1);
     ifree(last_tag);
     ifree(canon_path);
@@ -558,14 +642,14 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
 
   DEBUG("Filling directory");
   if (!filler) {
-    PMSG(LOG_ERR, "Filler function is undefined!");
+    PMSG(LOG_ERR, "Filler function is undefined!\n");
     qtree_free(&q, 1);
     ifree(last_tag);
     ifree(canon_path);
     return -EIO;
   }
   if (!buf) {
-    PMSG(LOG_ERR, "Destination buffer is undefined!");
+    PMSG(LOG_ERR, "Destination buffer is undefined!\n");
     qtree_free(&q, 1);
     ifree(last_tag);
     ifree(canon_path);
@@ -585,7 +669,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
 
     DEBUG("query_to_inodes() has returned");
     if (!inodelist) {
-      PMSG(LOG_ERR, "Error fetching inode list from query tree");
+      PMSG(LOG_ERR, "Error fetching inode list from query tree\n");
       qtree_free(&q, 1);
       ifree(last_tag);
       ifree(canon_path);
@@ -614,7 +698,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
   /* And now for directories */
 
   if (tree_sub_get_min(tree_root, &node)) {
-    PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed");
+    PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed\n");
     ifree(last_tag);
     ifree(canon_path);
     return -EIO;
@@ -624,7 +708,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     if (*last_tag)
       DEBUG("No subtags");
     else
-      PMSG(LOG_ERR, "Something went very, very wrong");
+      PMSG(LOG_ERR, "Something went very, very wrong\n");
     ifree(last_tag);
     ifree(canon_path);
     return 0;
@@ -645,7 +729,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     DEBUG("Calling tree_sub_get_min(%lu)", tree_root);
     int res=tree_sub_get_min(tree_root, &n);
     if (res && res != ENOENT) {
-      PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed: %s", strerror(errno));
+      PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed: %s\n", strerror(errno));
       ifree(lastbit);
       ifree(last_tag);
       ifree(canon_path);
@@ -692,7 +776,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
       }
     }
     if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
-      PMSG(LOG_ERR, "I/O error reading block");
+      PMSG(LOG_ERR, "I/O error reading block\n");
       ifree(last_tag);
       ifree(canon_path);
       return -EIO;
@@ -706,6 +790,8 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     ifree(bits[count]);
   }
   ifree(bits);
+
+  DEBUG("Done\n");
 
   return 0;
 }
@@ -725,6 +811,16 @@ static int insight_mkdir(const char *path, mode_t mode) {
 
   if (strcmp(newdir, INSIGHT_SUBKEY_IND)==0) {
     PMSG(LOG_WARNING, "Cannot create directories named \"%s\"", INSIGHT_SUBKEY_IND);
+    return -EPERM;
+  }
+
+  if (strcount(newdir, INSIGHT_SUBKEY_SEP_C)) {
+    PMSG(LOG_WARNING, "Cannot create directories that include \"%s\"", INSIGHT_SUBKEY_SEP);
+    return -EPERM;
+  }
+
+  if (*newdir == '_') {
+    PMSG(LOG_WARNING, "Cannot create directories that begin with an underscore");
     return -EPERM;
   }
 
@@ -794,7 +890,7 @@ static int insight_rmdir(const char *path) {
     canon_parent++;
 
   if (strcmp(olddir, INSIGHT_SUBKEY_IND)==0) {
-    PMSG(LOG_WARNING, "Cannot remove directories named \"%s\"", INSIGHT_SUBKEY_IND);
+    PMSG(LOG_WARNING, "Cannot remove directories named \"%s\"\n", INSIGHT_SUBKEY_IND);
     return -EPERM;
   }
 
@@ -804,7 +900,7 @@ static int insight_rmdir(const char *path) {
   }
 
   if (!*olddir) {
-    DEBUG("Invalid (empty) directory name");
+    DEBUG("Invalid (empty) directory name\n");
     return -EPERM;
   }
 
@@ -823,13 +919,12 @@ static int insight_rmdir(const char *path) {
   else             parent_tag++;
 
   while (last_char_in(parent_tag)==INSIGHT_SUBKEY_IND_C) {
-    DEBUG("Subtag");
     last_char_in(parent_tag)='\0';
     subtag=1;
   }
 
   if (*parent_tag && (tree_root=get_tag(parent_tag))==0) {
-    DEBUG("Tag \"%s\" not found", parent_tag);
+    DEBUG("Tag \"%s\" not found\n", parent_tag);
     return -ENOENT;
   }
   DEBUG("Found tag \"%s\"; tree root now %lu", parent_tag, tree_root);
@@ -844,13 +939,13 @@ static int insight_rmdir(const char *path) {
   int res=tree_sub_remove(tree_root, olddir);
 
   if (res<0) {
-    PMSG(LOG_ERR, "Tree removal failed with error: %s", strerror(-res));
+    PMSG(LOG_ERR, "Tree removal failed with error: %s\n", strerror(-res));
     return res;
   } else if (res) {
-    PMSG(LOG_ERR, "IO error: Tree removal failed");
+    PMSG(LOG_ERR, "IO error: Tree removal failed\n");
     return -EIO;
   }
-  DEBUG("Successfully removed \"%s\" from parent \"%s\"", olddir, parent_tag);
+  DEBUG("Successfully removed \"%s\" from parent \"%s\"\n", olddir, parent_tag);
 
   return 0;
 }
@@ -1045,6 +1140,7 @@ static int insight_symlink(const char *from, const char *to) {
     DEBUG("  ... \"%s\"", p->pw_name);
     sprintf(attr, "_owner%s%s", INSIGHT_SUBKEY_SEP, p->pw_name);
     DEBUG("  ... attr_addbyname(%lu, \"%s\");", hash, attr);
+    attr_addbyname_rec(hash, attr);
   } else {
     PMSG(LOG_ERR, "Failed to get username for uid %u", s.st_uid);
   }
@@ -1055,6 +1151,7 @@ static int insight_symlink(const char *from, const char *to) {
     DEBUG("  ... \"%s\"", g->gr_name);
     sprintf(attr, "_group%s%s", INSIGHT_SUBKEY_SEP, g->gr_name);
     DEBUG("  ... attr_addbyname(%lu, \"%s\");", hash, attr);
+    attr_addbyname_rec(hash, attr);
   } else {
     PMSG(LOG_ERR, "Failed to get group name for gid %u", s.st_gid);
   }
@@ -1068,6 +1165,7 @@ static int insight_symlink(const char *from, const char *to) {
   if (*ext) {
     sprintf(attr, "_ext%s%s", INSIGHT_SUBKEY_SEP, ext);
     DEBUG("  ... attr_addbyname(%lu, \"%s\");", hash, attr);
+    attr_addbyname_rec(hash, attr);
   }
 
   DEBUG("Done.");
@@ -1473,19 +1571,41 @@ static int insight_setxattr(const char *path, const char *name, const char *valu
   struct stat fstat;
 
   if (have_file_by_name(last, &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(last, strlen(last)));
+    fileptr inode = hash_path(last, strlen(last));
+    char *fullname = fullname_from_inode(inode);
     ifree(last);
-    DEBUG("Set attribute of real file: %s", fullname);
-    int res = setxattr(fullname, name, value, size, flags);
-    if (res==-1) {
-      PMSG(LOG_ERR, "setxattr(\"%s\", \"%s\", ...) failed: %s", fullname, name, strerror(errno));
-      ifree(fullname);
-      ifree(canon_path);
-      return -errno;
+    if (strncmp(name, "insight.", 8)==0) {
+      DEBUG("Insight namespace attribute");
+      char *attr = calloc(strlen(name)+strlen(value)+1, sizeof(char)); /* TODO: check for failure */
+      strcpy(attr, index(name, '.') + 1);
+      if (strlen(value)) {
+        strcat(attr, INSIGHT_SUBKEY_SEP);
+        strcat(attr, value);
+      }
+      if (!*attr) {
+        DEBUG("Null attribute");
+      }
+      DEBUG("Set Insight attribute \"%s\" of inode: %08lx", attr, inode);
+      int res=attr_addbyname_rec(inode, attr);
+      if (res) {
+        DEBUG("Error!");
+        return res;
+      }
+      ifree(attr);
+      return 0;
     } else {
-      ifree(fullname);
-      ifree(canon_path);
-      return res;
+      DEBUG("Set attribute of real file: %s", fullname);
+      int res = setxattr(fullname, name, value, size, flags);
+      if (res==-1) {
+        PMSG(LOG_ERR, "setxattr(\"%s\", \"%s\", ...) failed: %s", fullname, name, strerror(errno));
+        ifree(fullname);
+        ifree(canon_path);
+        return -errno;
+      } else {
+        ifree(fullname);
+        ifree(canon_path);
+        return res;
+      }
     }
   } else if (validate_path(canon_path)) {
     DEBUG("Cannot set extended attributes on directories");
@@ -1515,24 +1635,25 @@ static int insight_getxattr(const char *path, const char *name, char *value, siz
     if (res==-1) {
       if (errno != ENODATA) {
         /* perfectly normal */
-        PMSG(LOG_ERR, "getxattr(\"%s\", \"%s\", ...) failed: %s", fullname, name, strerror(errno));
+        PMSG(LOG_ERR, "getxattr(\"%s\", \"%s\", ...) failed: %s\n", fullname, name, strerror(errno));
       }
       ifree(fullname);
       ifree(canon_path);
       return -errno;
     } else {
+      DEBUG("\n");
       ifree(fullname);
       ifree(canon_path);
       return res;
     }
   } else if (validate_path(canon_path)) {
-    DEBUG("Cannot get extended attributes on directories");
+    DEBUG("Cannot get extended attributes on directories\n");
     ifree(last);
     ifree(canon_path);
     /* No attributes */
     return -ENODATA;
   } else {
-    DEBUG("Could not find path");
+    DEBUG("Could not find path\n");
     ifree(last);
     ifree(canon_path);
     return -ENOENT;
@@ -1552,13 +1673,14 @@ static int insight_listxattr(const char *path, char *list, size_t size) {
     DEBUG("List attributes of real file: %s", fullname);
     int res = listxattr(fullname, list, size);
     if (res==-1) {
-      PMSG(LOG_ERR, "listxattr(\"%s\", ...) failed: %s", fullname, strerror(errno));
+      PMSG(LOG_ERR, "listxattr(\"%s\", ...) failed: %s\n", fullname, strerror(errno));
       ifree(fullname);
       ifree(canon_path);
       return -errno;
     } else {
       ifree(fullname);
       ifree(canon_path);
+      DEBUG("\n");
       return res;
     }
   } else if (validate_path(canon_path)) {
@@ -1583,19 +1705,31 @@ static int insight_removexattr(const char *path, const char *name) {
   struct stat fstat;
 
   if (have_file_by_name(last, &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(last, strlen(last)));
+    fileptr inode = hash_path(last, strlen(last));
+    char *fullname = fullname_from_inode(inode);
     ifree(last);
-    DEBUG("Remove attribute of real file: %s", fullname);
-    int res = removexattr(fullname, name);
-    if (res==-1) {
-      PMSG(LOG_ERR, "removexattr(\"%s\", \"%s\") failed: %s", fullname, name, strerror(errno));
-      ifree(fullname);
-      ifree(canon_path);
-      return -errno;
+    if (strncmp(name, "insight.", 8)==0) {
+      DEBUG("Insight namespace attribute");
+      DEBUG("Remove Insight attribute \"%s\" of inode: %08lx", name+8, inode);
+      int res=attr_delbyname(inode, name+8);
+      if (res) {
+        DEBUG("Error! %s", strerror(-res));
+        return res;
+      }
+      return 0;
     } else {
-      ifree(fullname);
-      ifree(canon_path);
-      return res;
+      DEBUG("Remove attribute of real file: %s", fullname);
+      int res = removexattr(fullname, name);
+      if (res==-1) {
+        PMSG(LOG_ERR, "removexattr(\"%s\", \"%s\") failed: %s", fullname, name, strerror(errno));
+        ifree(fullname);
+        ifree(canon_path);
+        return -errno;
+      } else {
+        ifree(fullname);
+        ifree(canon_path);
+        return res;
+      }
     }
   } else if (validate_path(canon_path)) {
     DEBUG("Cannot remove extended attributes on directories");

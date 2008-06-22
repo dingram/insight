@@ -1648,7 +1648,6 @@ int inode_free_chain(fileptr block) {
  * @returns Zero on success, error code on failure.
  */
 int inode_insert(fileptr block, fileptr inode) {
-  fileptr *inodes;
   DEBUG("Inserting %08lX into inode list at block %lu", inode, block);
   int count = inode_get_all(block, NULL, 0);
   DEBUG("Need %d inodes of space", count);
@@ -1657,28 +1656,35 @@ int inode_insert(fileptr block, fileptr inode) {
     return EIO;
   }
 
-
-  inodes = malloc((count+1)*sizeof(fileptr));
+  fileptr *inodes = malloc(count*sizeof(fileptr));
   if (!inodes) {
     PMSG(LOG_ERR, "Failed to allocate memory for inodes array");
     return ENOMEM;
   }
-  if (inode_get_all(block, inodes, count+1)<0) {
+  fileptr *inodes_new = calloc(count+1, sizeof(fileptr));
+  if (!inodes_new) {
+    PMSG(LOG_ERR, "Failed to allocate memory for inodes array");
+    ifree(inodes);
+    return ENOMEM;
+  }
+  if (inode_get_all(block, inodes, count)<0) {
     PMSG(LOG_ERR, "Failed to get inode array from block %lu", block);
     free(inodes);
     return EIO;
   }
 
-  /* insert node (automatically sorted when saved) */
-  inodes[count] = inode;
+  /* insert node */
+  set_union(inodes, &inode, inodes_new, count, 1, count+1, sizeof(fileptr), inodecmp);
 
   /* save array back to target block */
-  if (inode_put_all(block, inodes, count+1)<0) {
+  if (inode_put_all(block, inodes_new, count+1)<0) {
     PMSG(LOG_ERR, "Failed to save inode array to block %lu", block);
+    free(inodes_new);
     free(inodes);
     return EIO;
   }
 
+  free(inodes_new);
   free(inodes);
   return 0;
 }
@@ -1834,7 +1840,7 @@ int inode_put_all(fileptr block, fileptr *inodes, unsigned int count) {
     }
 
     if (ib.magic == MAGIC_FREEBLOCK) {
-      /* taking a big chance here */
+      /* XXX: taking a big chance here */
       initInodeBlock(&ib);
     } else if (ib.magic != MAGIC_INODEBLOCK) {
       PMSG(LOG_ERR, "Failed to verify inode");
