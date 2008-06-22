@@ -12,7 +12,7 @@
 /** Order of the inode tree - i.e. how many pointers are stored */
 #define DORDER ((TREEBLOCK_SIZE - 2*sizeof(short))/(sizeof(fileptr)+sizeof(fileptr))+1)
 /** Maximum number of inodes in a data block */
-#define INODECOUNT 124
+#define DATA_INODE_MAX ((TREEBLOCK_SIZE - sizeof(short) - 2*sizeof(unsigned long))/sizeof(fileptr))
 /** Maximum number of inodes in an inode block */
 #define INODE_MAX ((TREEBLOCK_SIZE - sizeof(short) - 2*sizeof(unsigned long))/sizeof(fileptr))
 /** Maximum number of references in an inode data block */
@@ -108,8 +108,8 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   short flags;                /**< Flags and other information about this node */
   fileptr subkeys;            /**< Root node of subkeys tree or address of synonym target if \a flags contain \c DATA_FLAGS_SYNONYM */
   union {
-    fileptr inodes[INODECOUNT]; /**< List of inodes */
-    char    target[INODECOUNT*(sizeof(unsigned long)/sizeof(char))]; /**< Synonym target name */
+    fileptr inodes[DATA_INODE_MAX]; /**< List of inodes */
+    char    target[DATA_INODE_MAX*(sizeof(unsigned long)/sizeof(char))]; /**< Synonym target name */
   };
   fileptr next_inodes;        /**< Address of next block of inodes, or zero if none */
 } tdata;
@@ -175,8 +175,8 @@ int     tree_map_keys     (const fileptr root, int (*func)(const char *, const f
 int inode_free_chain(fileptr block);
 int inode_insert(fileptr block, fileptr inode);
 int inode_remove(fileptr block, fileptr inode);
-int inode_put_all(fileptr block, fileptr *inodes, int count);
-int inode_get_all(fileptr block, fileptr *inodes, int max);
+int inode_put_all(fileptr block, fileptr *inodes, unsigned int count);
+int inode_get_all(fileptr block, fileptr *inodes, unsigned int max);
 fileptr *inode_get_all_recurse(fileptr block, int *count);
 
 #ifndef MAX

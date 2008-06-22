@@ -68,6 +68,12 @@ static int   insight_statfs(const char *path, struct statfs *stbuf);
 static int   insight_release(const char *path, struct fuse_file_info *fi);
 static int   insight_fsync(const char *path, int isdatasync, struct fuse_file_info *fi);
 static int   insight_access(const char *path, int mode);
+#ifdef HAVE_SETXATTR
+static int   insight_setxattr(const char *path, const char *name, const char *value, size_t size, int flags);
+static int   insight_getxattr(const char *path, const char *name, char *value, size_t size);
+static int   insight_listxattr(const char *path, char *list, size_t size);
+static int   insight_removexattr(const char *path, const char *name);
+#endif /* HAVE_SETXATTR */
 static void  insight_destroy(void *arg);
 #if FUSE_VERSION >= 26
 static void *insight_init(struct fuse_conn_info *conn);
@@ -145,7 +151,7 @@ static int usage_printed = 0;
 
 
 static int limbo_search(fileptr inode) {
-  fileptr *inodes;
+  fileptr *inodes=NULL;
   int i, count = inode_get_all(0, NULL, 0);
   if (count>0) {
     inodes = calloc(count, sizeof(fileptr));
@@ -243,6 +249,17 @@ static int attr_add(fileptr inode, fileptr attrid) {
     }
   }
   return 0;
+}
+
+static int attr_addbyname(fileptr inode, char *attr) {
+  if (!attr || !*attr) {
+    return 0;
+  }
+  fileptr attrid = get_tag(attr);
+  if (!attrid) {
+    return -ENOENT;
+  }
+  return attr_add(inode, attrid);
 }
 
 static int attr_del(fileptr inode, fileptr attrid) {
@@ -976,15 +993,56 @@ static int insight_symlink(const char *from, const char *to) {
     ifree(finaldest);
     return -EIO;
   }
+  ifree(finaldest);
 
   DEBUG("Inserting inode into tree at root level (for now)");
   if ((errno=inode_insert(0, hash))) {
     PMSG(LOG_ERR, "IO error: Failed to insert inode into tree: %s", strerror(errno));
-    ifree(finaldest);
     return -EIO;
   }
 
-  ifree(finaldest);
+  DEBUG("Automatic attribute assignments...");
+  char attr[255];
+
+  DEBUG("  Statting...");
+  if (stat(from, &s)==-1) {
+    PMSG(LOG_ERR, "Failed to stat the structure");
+    return -EIO;
+  }
+
+  DEBUG("  Fetching username from uid %u", s.st_uid);
+  struct passwd *p=getpwuid(s.st_uid);
+  if (p) {
+    DEBUG("  ... \"%s\"", p->pw_name);
+    sprintf(attr, "_owner%s%s", INSIGHT_SUBKEY_SEP, p->pw_name);
+    DEBUG("  ... attr_addbyname(%lu, \"%s\");", hash, attr);
+  } else {
+    PMSG(LOG_ERR, "Failed to get username for uid %u", s.st_uid);
+  }
+
+  DEBUG("  Fetching group name from gid %u", s.st_gid);
+  struct group *g=getgrgid(s.st_gid);
+  if (g) {
+    DEBUG("  ... \"%s\"", g->gr_name);
+    sprintf(attr, "_group%s%s", INSIGHT_SUBKEY_SEP, g->gr_name);
+    DEBUG("  ... attr_addbyname(%lu, \"%s\");", hash, attr);
+  } else {
+    PMSG(LOG_ERR, "Failed to get group name for gid %u", s.st_gid);
+  }
+
+  char *basename = strlast(from, '/');
+  char *ext = strlast(basename, '.');
+  if (strcmp(ext, basename)==0) {
+    *ext='\0';
+  }
+  DEBUG("  File extension: \"%s\"", ext);
+  if (*ext) {
+    sprintf(attr, "_ext%s%s", INSIGHT_SUBKEY_SEP, ext);
+    DEBUG("  ... attr_addbyname(%lu, \"%s\");", hash, attr);
+  }
+
+  DEBUG("Done.");
+
   return 0;
 }
 
@@ -1374,6 +1432,129 @@ static int insight_access(const char *path, int mode) {
   DEBUG("access() called on \"%s\"", path);
   return 0;
 }
+
+#ifdef HAVE_SETXATTR
+/* xattr operations are optional and can safely be left unimplemented */
+static int insight_setxattr(const char *path, const char *name, const char *value, size_t size, int flags) {
+  char *canon_path = get_canonical_path(path);
+
+  DEBUG("Set \"%s\" extended attribute of \"%s\"", name, canon_path);
+
+  struct stat fstat;
+
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+    DEBUG("Set attribute of real file: %s", fullname);
+    int res = setxattr(fullname, name, value, size, flags);
+    if (res==-1) {
+      PMSG(LOG_ERR, "setxattr(\"%s\", \"%s\", ...) failed: %s", fullname, name, strerror(errno));
+      ifree(fullname);
+      return -errno;
+    } else {
+      ifree(fullname);
+      return res;
+    }
+  } else if (validate_path(canon_path)) {
+    DEBUG("Cannot set extended attributes on directories");
+    return -EPERM;
+  } else {
+    DEBUG("Could not find path");
+    return -ENOENT;
+  }
+
+  return 0;
+}
+
+static int insight_getxattr(const char *path, const char *name, char *value, size_t size) {
+  char *canon_path = get_canonical_path(path);
+
+  DEBUG("Get \"%s\" extended attribute of \"%s\"", name, canon_path);
+
+  struct stat fstat;
+
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+    DEBUG("Get attribute of real file: %s", fullname);
+    int res = getxattr(fullname, name, value, size);
+    if (res==-1) {
+      PMSG(LOG_ERR, "getxattr(\"%s\", \"%s\", ...) failed: %s", fullname, name, strerror(errno));
+      ifree(fullname);
+      return -errno;
+    } else {
+      ifree(fullname);
+      return res;
+    }
+  } else if (validate_path(canon_path)) {
+    DEBUG("Cannot get extended attributes on directories");
+    return -EPERM;
+  } else {
+    DEBUG("Could not find path");
+    return -ENOENT;
+  }
+
+  return 0;
+}
+
+static int insight_listxattr(const char *path, char *list, size_t size) {
+  char *canon_path = get_canonical_path(path);
+
+  DEBUG("List extended attributes of \"%s\"", canon_path);
+
+  struct stat fstat;
+
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+    DEBUG("List attributes of real file: %s", fullname);
+    int res = listxattr(fullname, list, size);
+    if (res==-1) {
+      PMSG(LOG_ERR, "listxattr(\"%s\", ...) failed: %s", fullname, strerror(errno));
+      ifree(fullname);
+      return -errno;
+    } else {
+      ifree(fullname);
+      return res;
+    }
+  } else if (validate_path(canon_path)) {
+    DEBUG("Cannot list extended attributes on directories");
+    return -EPERM;
+  } else {
+    DEBUG("Could not find path");
+    return -ENOENT;
+  }
+
+  return 0;
+}
+
+static int insight_removexattr(const char *path, const char *name) {
+  char *canon_path = get_canonical_path(path);
+
+  DEBUG("Remove extended attribute \"%s\" of \"%s\"", name, canon_path);
+
+  struct stat fstat;
+
+  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+    DEBUG("Remove attribute of real file: %s", fullname);
+    int res = removexattr(fullname, name);
+    if (res==-1) {
+      PMSG(LOG_ERR, "removexattr(\"%s\", \"%s\") failed: %s", fullname, name, strerror(errno));
+      ifree(fullname);
+      return -errno;
+    } else {
+      ifree(fullname);
+      return res;
+    }
+  } else if (validate_path(canon_path)) {
+    DEBUG("Cannot remove extended attributes on directories");
+    return -EPERM;
+  } else {
+    DEBUG("Could not find path");
+    return -ENOENT;
+  }
+
+  return 0;
+}
+#endif /* HAVE_SETXATTR */
 
 #if FUSE_VERSION >= 26
 static void *insight_init(struct fuse_conn_info *conn) {

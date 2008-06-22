@@ -33,7 +33,7 @@ AC_FUNC_MALLOC
 AC_TYPE_SIGNAL
 AC_FUNC_STAT
 AC_FUNC_UTIME_NULL
-AC_CHECK_FUNCS([memset mkdir rmdir setenv strdup strerror utime])
+AC_CHECK_FUNCS([memset mkdir rmdir setenv strdup strerror utime setxattr])
 
 # set up defualt CFLAGS
 AC_SUBST([CFLAGS],["${CFLAGS} -D_FILE_OFFSET_BITS=64 -Wall -W"])

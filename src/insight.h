@@ -75,6 +75,8 @@
 #include <signal.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <pwd.h>
+#include <grp.h>
 
 #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>

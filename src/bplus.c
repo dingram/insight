@@ -1447,7 +1447,7 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
       errno=ENOTEMPTY;
       return -ENOTEMPTY;
     }
-    if (dblock.inodecount > INODECOUNT) {
+    if (dblock.inodecount > DATA_INODE_MAX) {
       DEBUG("Node has inode blocks - must delete those too!");
       if (inode_free_chain(dblock.next_inodes)) {
         PMSG(LOG_ERR, "Failed to free attached inode chain");
@@ -1759,9 +1759,9 @@ int inode_remove(fileptr block, fileptr inode) {
  * @param[in] count  Number of inodes in the array.
  * @returns Zero on success, or a negative error code on failure.
  */
-int inode_put_all(fileptr block, fileptr *inodes, int count) {
+int inode_put_all(fileptr block, fileptr *inodes, unsigned int count) {
   tdata datablock;
-  int curinode=0;
+  unsigned int curinode=0;
 
   DEBUG("inode_put_all(block: %lu, inodes: %lu, count: %d)", block, inodes, count);
 
@@ -1775,7 +1775,7 @@ int inode_put_all(fileptr block, fileptr *inodes, int count) {
 
   if (!block) {
     DEBUG("Starting at superblock and writing inodes in limbo");
-    tree_sb->limbo_count = MIN(count, INODECOUNT);
+    tree_sb->limbo_count = MIN(count, DATA_INODE_MAX);
     datablock.inodecount = tree_sb->limbo_count;
     if (!tree_sb->inode_limbo) {
       DEBUG("Creating inode limbo area");
@@ -1798,8 +1798,8 @@ int inode_put_all(fileptr block, fileptr *inodes, int count) {
       return -EIO;
     }
 
-    DEBUG("Copying %u inodes from user buffer direct to block", MIN(count, INODECOUNT));
-    datablock.inodecount = MIN(count, INODECOUNT);
+    DEBUG("Copying %u inodes from user buffer direct to block", MIN(count, DATA_INODE_MAX));
+    datablock.inodecount = MIN(count, DATA_INODE_MAX);
     memcpy(datablock.inodes, inodes, datablock.inodecount*sizeof(fileptr));
     curinode += datablock.inodecount;
 
@@ -1839,7 +1839,7 @@ int inode_put_all(fileptr block, fileptr *inodes, int count) {
       PMSG(LOG_ERR, "Failed to verify inode");
       return -EIO;
     }
-    ib.inodecount = MIN(count, INODECOUNT);
+    ib.inodecount = MIN(count, DATA_INODE_MAX);
     memcpy(ib.inodes, &inodes[curinode], ib.inodecount*sizeof(fileptr));
     curinode += ib.inodecount;
     if (curinode<count && !ib.next_inodes) {
@@ -2011,7 +2011,7 @@ fileptr *inode_get_all_recurse(fileptr block, int *count) {
  * @returns Zero on success, the number of inodes if \a inodes is NULL, or a
  * negative error code on failure.
  */
-int inode_get_all(fileptr block, fileptr *inodes, int max) {
+int inode_get_all(fileptr block, fileptr *inodes, unsigned int max) {
   tdata datablock;
   int curinode=0;
 
@@ -2039,8 +2039,8 @@ int inode_get_all(fileptr block, fileptr *inodes, int max) {
     }
 
     DEBUG("Copying inodes to user buffer");
-    memcpy(inodes, datablock.inodes, MIN(datablock.inodecount, INODECOUNT)*sizeof(fileptr));
-    curinode += MIN(datablock.inodecount, INODECOUNT);
+    memcpy(inodes, datablock.inodes, MIN(datablock.inodecount, DATA_INODE_MAX)*sizeof(fileptr));
+    curinode += MIN(datablock.inodecount, DATA_INODE_MAX);
   }
 
   DEBUG("Following pointers if required...");
