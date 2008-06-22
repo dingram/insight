@@ -34,7 +34,7 @@ static inline void DUMPDATA(tdata *node) {
   printf("  flags: %x\n", node->flags);
   printf("  subkeys: %lu\n", node->subkeys);
   printf("  inodes:");
-  for(i=0;i<INODECOUNT;i++) printf((i>=node->inodecount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->inodes[i]);
+  for(i=0;i<DATA_INODE_MAX;i++) printf((i>=node->inodecount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->inodes[i]);
   printf("\n");
   printf("  next_inodes: %lu\n", node->next_inodes);
 }

@@ -101,6 +101,7 @@ int strsplitmap(const char *input, const char sep, int (*func)(const char *, uns
   char *sepstr=calloc(2, sizeof(char));
   if (!sepstr) {
     PMSG(LOG_ERR, "Could not allocate space for sepstr");
+    ifree(dup);
     return ENOMEM;
   }
   sepstr[0]=sep;
@@ -110,6 +111,8 @@ int strsplitmap(const char *input, const char sep, int (*func)(const char *, uns
     ret = func(input, data);
     DEBUG("User function returned %d", ret);
     if (ret>0) ret=0;
+    ifree(sepstr);
+    ifree(dup);
     return ret;
   }
 
@@ -227,7 +230,8 @@ unsigned long hash_path(const char *path, int len) {
 	int i;
 
   /* bit of molding */
-  char *p = strlast(path, '/') + 1;
+  char *p_orig = strlast(path, '/');
+  char *p = p_orig + 1;
 
 	pad = (unsigned long) len | ((unsigned long) len << 8);
 	pad |= pad << 16;
@@ -293,6 +297,8 @@ unsigned long hash_path(const char *path, int len) {
 	}
 
 	TEACORE(FULLROUNDS);
+
+  ifree(p_orig);
 
 	return h0 ^ h1;
 }

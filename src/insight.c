@@ -421,12 +421,17 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
   DEBUG("Getattr called on path \"%s\"", canon_path);
 
   if (have_file_by_name(last, &fstat)) {
+    ifree(last);
     DEBUG("Got a file\n");
 
     memcpy(stbuf, &fstat, sizeof(struct stat));
+    qtree_free(&q, 1);
+    ifree(canon_path);
     return 0;
 
   } else if (validate_path(canon_path)) {
+    ifree(last);
+
     /* steal a default stat structure */
     memcpy(stbuf, &insight.mountstat, sizeof(struct stat));
 
@@ -439,6 +444,8 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
       stbuf->st_mode = S_IFDIR | 0755;
       stbuf->st_nlink = tree_key_count();
       stbuf->st_ino = 1;
+      qtree_free(&q, 1);
+      ifree(canon_path);
       return 0;
     }
 
@@ -450,6 +457,8 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
       char *tmpp = calloc(strlen(canon_path)+2, sizeof(char));
       if (!tmpp) {
         PMSG(LOG_ERR, "Failed to allocate temporary space for hash path");
+        ifree(canon_path);
+        qtree_free(&q, 1);
         return -ENOMEM;
       }
       strcpy(tmpp, canon_path);
@@ -470,11 +479,15 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
 
       if (!tagdata) {
         DEBUG("Tag \"%s\" not found\n", canon_path+1);
+        qtree_free(&q, 1);
+        ifree(canon_path);
         return -ENOENT;
       }
       DEBUG("Found tag \"%s\"", canon_path+1);
       if (tree_read(tagdata, (tblock*)&dnode)) {
         PMSG(LOG_ERR, "IO error reading data block");
+        qtree_free(&q, 1);
+        ifree(canon_path);
         return -EIO;
       }
 
@@ -497,9 +510,14 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
     }
   } else {
     DEBUG("Path does not exist\n");
+    ifree(last);
+    qtree_free(&q, 1);
+    ifree(canon_path);
     return -ENOENT;
   }
   DEBUG("Returning\n");
+  qtree_free(&q, 1);
+  ifree(canon_path);
   return 0;
 }
 
@@ -514,6 +532,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
 
   if (!validate_path(canon_path)) {
     DEBUG("Path does not exist\n");
+    ifree(canon_path);
     return -ENOENT;
   }
 
@@ -532,6 +551,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     DEBUG("Tag \"%s\" not found", last_tag);
     qtree_free(&q, 1);
     ifree(last_tag);
+    ifree(canon_path);
     return -ENOENT;
   }
   DEBUG("Found tag \"%s\"; tree root now %lu", last_tag, tree_root);
@@ -541,12 +561,14 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     PMSG(LOG_ERR, "Filler function is undefined!");
     qtree_free(&q, 1);
     ifree(last_tag);
+    ifree(canon_path);
     return -EIO;
   }
   if (!buf) {
     PMSG(LOG_ERR, "Destination buffer is undefined!");
     qtree_free(&q, 1);
     ifree(last_tag);
+    ifree(canon_path);
     return -EIO;
   }
   DEBUG("Calling filler on dot");
@@ -566,6 +588,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
       PMSG(LOG_ERR, "Error fetching inode list from query tree");
       qtree_free(&q, 1);
       ifree(last_tag);
+      ifree(canon_path);
       return -EIO;
     }
     DEBUG("%d inodes to consider", inodecount);
@@ -578,6 +601,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
       } else {
         FMSG(LOG_ERR, "Error getting filename for inode %08lX", inodelist[i]);
       }
+      ifree(str);
     }
 
     DEBUG("Freeing inode array");
@@ -592,6 +616,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
   if (tree_sub_get_min(tree_root, &node)) {
     PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed");
     ifree(last_tag);
+    ifree(canon_path);
     return -EIO;
   }
 
@@ -601,6 +626,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     else
       PMSG(LOG_ERR, "Something went very, very wrong");
     ifree(last_tag);
+    ifree(canon_path);
     return 0;
   }
 
@@ -622,6 +648,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
       PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed: %s", strerror(errno));
       ifree(lastbit);
       ifree(last_tag);
+      ifree(canon_path);
       return -EIO;
     }
 
@@ -667,11 +694,13 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
       PMSG(LOG_ERR, "I/O error reading block");
       ifree(last_tag);
+      ifree(canon_path);
       return -EIO;
     }
   } while (node.ptrs[0]);
 
   ifree(last_tag);
+  ifree(canon_path);
 
   for (count--;count>=0; count--) {
     ifree(bits[count]);
@@ -695,7 +724,7 @@ static int insight_mkdir(const char *path, mode_t mode) {
     canon_parent++;
 
   if (strcmp(newdir, INSIGHT_SUBKEY_IND)==0) {
-    PMSG(LOG_WARN, "Cannot create directories named \"%s\"", INSIGHT_SUBKEY_IND);
+    PMSG(LOG_WARNING, "Cannot create directories named \"%s\"", INSIGHT_SUBKEY_IND);
     return -EPERM;
   }
 
@@ -765,7 +794,7 @@ static int insight_rmdir(const char *path) {
     canon_parent++;
 
   if (strcmp(olddir, INSIGHT_SUBKEY_IND)==0) {
-    PMSG(LOG_WARN, "Cannot remove directories named \"%s\"", INSIGHT_SUBKEY_IND);
+    PMSG(LOG_WARNING, "Cannot remove directories named \"%s\"", INSIGHT_SUBKEY_IND);
     return -EPERM;
   }
 
@@ -1437,119 +1466,146 @@ static int insight_access(const char *path, int mode) {
 /* xattr operations are optional and can safely be left unimplemented */
 static int insight_setxattr(const char *path, const char *name, const char *value, size_t size, int flags) {
   char *canon_path = get_canonical_path(path);
+  char *last = strlast(canon_path+1, '/');
 
   DEBUG("Set \"%s\" extended attribute of \"%s\"", name, canon_path);
 
   struct stat fstat;
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+  if (have_file_by_name(last, &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(last, strlen(last)));
+    ifree(last);
     DEBUG("Set attribute of real file: %s", fullname);
     int res = setxattr(fullname, name, value, size, flags);
     if (res==-1) {
       PMSG(LOG_ERR, "setxattr(\"%s\", \"%s\", ...) failed: %s", fullname, name, strerror(errno));
       ifree(fullname);
+      ifree(canon_path);
       return -errno;
     } else {
       ifree(fullname);
+      ifree(canon_path);
       return res;
     }
   } else if (validate_path(canon_path)) {
     DEBUG("Cannot set extended attributes on directories");
+    ifree(last);
+    ifree(canon_path);
     return -EPERM;
   } else {
     DEBUG("Could not find path");
+    ifree(last);
+    ifree(canon_path);
     return -ENOENT;
   }
-
-  return 0;
 }
 
 static int insight_getxattr(const char *path, const char *name, char *value, size_t size) {
   char *canon_path = get_canonical_path(path);
-
+  char *last = strlast(canon_path+1, '/');
   DEBUG("Get \"%s\" extended attribute of \"%s\"", name, canon_path);
 
   struct stat fstat;
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+  if (have_file_by_name(last, &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(last, strlen(last)));
+    ifree(last);
     DEBUG("Get attribute of real file: %s", fullname);
     int res = getxattr(fullname, name, value, size);
     if (res==-1) {
-      PMSG(LOG_ERR, "getxattr(\"%s\", \"%s\", ...) failed: %s", fullname, name, strerror(errno));
+      if (errno != ENODATA) {
+        /* perfectly normal */
+        PMSG(LOG_ERR, "getxattr(\"%s\", \"%s\", ...) failed: %s", fullname, name, strerror(errno));
+      }
       ifree(fullname);
+      ifree(canon_path);
       return -errno;
     } else {
       ifree(fullname);
+      ifree(canon_path);
       return res;
     }
   } else if (validate_path(canon_path)) {
     DEBUG("Cannot get extended attributes on directories");
+    ifree(last);
+    ifree(canon_path);
     /* No attributes */
     return -ENODATA;
   } else {
     DEBUG("Could not find path");
+    ifree(last);
+    ifree(canon_path);
     return -ENOENT;
   }
-
-  return 0;
 }
 
 static int insight_listxattr(const char *path, char *list, size_t size) {
   char *canon_path = get_canonical_path(path);
-
+  char *last = strlast(canon_path+1, '/');
   DEBUG("List extended attributes of \"%s\"", canon_path);
 
   struct stat fstat;
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+  if (have_file_by_name(last, &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(last, strlen(last)));
+    ifree(last);
     DEBUG("List attributes of real file: %s", fullname);
     int res = listxattr(fullname, list, size);
     if (res==-1) {
       PMSG(LOG_ERR, "listxattr(\"%s\", ...) failed: %s", fullname, strerror(errno));
       ifree(fullname);
+      ifree(canon_path);
       return -errno;
     } else {
       ifree(fullname);
+      ifree(canon_path);
       return res;
     }
   } else if (validate_path(canon_path)) {
     DEBUG("Cannot list extended attributes on directories");
-    return -EPERM;
+    ifree(last);
+    ifree(canon_path);
+    /* No attributes */
+    return -ENODATA;
   } else {
     DEBUG("Could not find path");
+    ifree(last);
+    ifree(canon_path);
     return -ENOENT;
   }
-
-  return 0;
 }
 
 static int insight_removexattr(const char *path, const char *name) {
   char *canon_path = get_canonical_path(path);
-
+  char *last = strlast(canon_path+1, '/');
   DEBUG("Remove extended attribute \"%s\" of \"%s\"", name, canon_path);
 
   struct stat fstat;
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+  if (have_file_by_name(last, &fstat)) {
+    char *fullname = fullname_from_inode(hash_path(last, strlen(last)));
+    ifree(last);
     DEBUG("Remove attribute of real file: %s", fullname);
     int res = removexattr(fullname, name);
     if (res==-1) {
       PMSG(LOG_ERR, "removexattr(\"%s\", \"%s\") failed: %s", fullname, name, strerror(errno));
       ifree(fullname);
+      ifree(canon_path);
       return -errno;
     } else {
       ifree(fullname);
+      ifree(canon_path);
       return res;
     }
   } else if (validate_path(canon_path)) {
     DEBUG("Cannot remove extended attributes on directories");
+    ifree(last);
+    ifree(canon_path);
     return -EPERM;
   } else {
     DEBUG("Could not find path");
+    ifree(last);
+    ifree(canon_path);
     return -ENOENT;
   }
 
@@ -1717,12 +1773,15 @@ static int insight_open_store() {
         if (mkdir(insightdir, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {
           if (!insight.quiet)
             FMSG(LOG_ERR, "Default Insight directory %s does not exist and can't be created!\n\n", insightdir);
+          ifree(insightdir);
           return 2;
         }
       } else if (!S_ISDIR(dst.st_mode)) {
         FMSG(LOG_ERR, "Default Insight directory %s exists but must be a directory!\n\n", insightdir);
+        ifree(insightdir);
         return 2;
       }
+      ifree(insightdir);
     } else {
       usage(insight.progname);
       if (!insight.quiet)
@@ -1800,12 +1859,16 @@ static int insight_check_repos() {
         if (mkdir(insightdir, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {
           if (!insight.quiet)
             FMSG(LOG_ERR, "Default Insight directory %s does not exist and can't be created!\n\n", insightdir);
+          ifree(insightdir);
           return 2;
         }
       } else if (!S_ISDIR(dst.st_mode)) {
         FMSG(LOG_ERR, "Default Insight directory %s exists but must be a directory!\n\n", insightdir);
+        ifree(insightdir);
         return 2;
       }
+
+      ifree(insightdir);
     } else {
       usage(insight.progname);
       if (!insight.quiet)
@@ -1915,11 +1978,14 @@ int main(int argc, char *argv[]) {
 
   if (insight_open_store()) {
     /* Fatal error! Details printed by the function */
+    if (insight.treestore) ifree(insight.treestore);
     exit(2);
   }
 
   if (insight_check_repos()) {
     /* Fatal error! Details printed by the function */
+    ifree(insight.treestore);
+    if (insight.repository) ifree(insight.repository);
     exit(2);
   }
 
@@ -1940,6 +2006,7 @@ int main(int argc, char *argv[]) {
 
   fuse_opt_free_args(&args);
 
+  ifree(insight.mountpoint);
   ifree(insight.treestore);
   ifree(insight.repository);
 

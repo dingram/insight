@@ -358,7 +358,7 @@ int tree_close (void) {
  */
 int tree_grow (fileptr newsize) {
   if (newsize < tree_sb->max_size) {
-    PMSG(LOG_WARN, "Tried to shrink metadata store from %lu blocks to %lu.", tree_sb->max_size, newsize);
+    PMSG(LOG_WARNING, "Tried to shrink metadata store from %lu blocks to %lu.", tree_sb->max_size, newsize);
     return EINVAL;
   }
   if (newsize == tree_sb->max_size) {
@@ -398,6 +398,7 @@ int tree_read (fileptr block, tblock *data) {
 #endif
   /* Read from disk */
   if (lseek(tree_fp, block * TREEBLOCK_SIZE, SEEK_SET)<0) {
+    PMSG(LOG_ERR, "tree_read(block: %lu, data: %p)", block, data);
     PMSG(LOG_ERR, "Seek failed: %s", strerror(errno));
     return EIO;
   }
@@ -501,7 +502,7 @@ static int tree_cache_init() {
     PMSG(LOG_ERR, "Cache already allocated");
     return EEXIST;
   }
-  block_cache = malloc(CACHE_COUNT * sizeof(cache_ent));
+  block_cache = calloc(CACHE_COUNT, sizeof(cache_ent));
   if (!block_cache) {
     PMSG(LOG_ERR, "Failed to allocate cache");
     return ENOMEM;
@@ -617,7 +618,7 @@ static int tree_cache_put(fileptr block, tblock *data) {
 #endif
     return 0;
   } else if (!tree_sb) {
-    PMSG(LOG_WARN, "Cannot cache superblock as it hasn't been allocated yet.");
+    PMSG(LOG_WARNING, "Cannot cache superblock as it hasn't been allocated yet.");
     return 0;
   } else if (!block) {
     DEBUG("Trying to put superblock into cache; doing nothing");
@@ -1055,7 +1056,7 @@ static int tree_insert_recurse (fileptr root, char **key, fileptr *ptr) {
     }
   }
   if (keymatch) {
-    PMSG(LOG_WARN, "Key \"%s\" already in tree", *key);
+    PMSG(LOG_WARNING, "Key \"%s\" already in tree", *key);
     errno=EEXIST;
   } else if (tmp > 0 || node.leaf) {
     DEBUG("Inserting key \"%s\"", *key);
@@ -1443,7 +1444,7 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
       return -EIO;
     }
     if (dblock.subkeys) {
-      PMSG(LOG_WARN, "Node has subkeys - must not be deleted!");
+      PMSG(LOG_WARNING, "Node has subkeys - must not be deleted!");
       errno=ENOTEMPTY;
       return -ENOTEMPTY;
     }
@@ -1508,7 +1509,7 @@ int tree_sub_remove(fileptr root, tkey key) {
   }
 
   if (!dataroot.subkeys) {
-    PMSG(LOG_WARN, "No tree to remove from!");
+    PMSG(LOG_WARNING, "No tree to remove from!");
     errno=ENOENT;
     return -ENOENT;
   }
@@ -2015,6 +2016,8 @@ int inode_get_all(fileptr block, fileptr *inodes, unsigned int max) {
   tdata datablock;
   int curinode=0;
 
+  bzero(&datablock, sizeof(tdata));
+
   if (!block) {
     DEBUG("Starting at superblock and reading inodes in limbo");
     if (!inodes) {
@@ -2045,7 +2048,7 @@ int inode_get_all(fileptr block, fileptr *inodes, unsigned int max) {
 
   DEBUG("Following pointers if required...");
 
-  fileptr inodeptr;
+  fileptr inodeptr=0;
   tinode ib;
   /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
   for (inodeptr = datablock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {

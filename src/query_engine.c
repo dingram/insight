@@ -515,7 +515,7 @@ int query_get_subtags(const qelem *query, char *parent, int len) {
         DEBUG("AND/OR: second branch gives us tag \"%s\"", tmp);
 
         if (wasset && *tmp) {
-          PMSG(LOG_WARN, "Ambiguous result detected in query tree!");
+          PMSG(LOG_WARNING, "Ambiguous result detected in query tree!");
           if (wasset) ifree(tmp);
           return 2;
         }

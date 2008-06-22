@@ -194,7 +194,9 @@ fileptr get_last_tag(const char *path) {
   }
 
   char *tag = strlast(path, '/');
-  return get_tag(tag);
+  fileptr ret = get_tag(tag);
+  ifree(tag);
+  return ret;
 }
 
 /**
@@ -286,7 +288,9 @@ int have_file_by_shash(const char *hash, struct stat *fstat) {
   if (!filepath) return 0;
   struct stat s;
 
-  return !((stat(filepath, fstat?fstat:&s) == -1) && (errno == ENOENT));
+  int ret = !((stat(filepath, fstat?fstat:&s) == -1) && (errno == ENOENT));
+  ifree(filepath);
+  return ret;
 }
 
 int have_file_by_hash(const unsigned long hash, struct stat *fstat) {

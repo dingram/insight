@@ -8,7 +8,7 @@
 
 #ifdef _MSG_STDERR
 #include <stdio.h>
-#define MSG(l, f, ...)  fprintf(stderr, f "\n",## __VA_ARGS__)
+#define MSG(l, f, ...)  fprintf((l<=LOG_WARNING)?stderr:stdout, f "\n",## __VA_ARGS__)
 #define INIT_LOG()
 #else
 #include <syslog.h>
