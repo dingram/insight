@@ -1486,7 +1486,8 @@ static int insight_getxattr(const char *path, const char *name, char *value, siz
     }
   } else if (validate_path(canon_path)) {
     DEBUG("Cannot get extended attributes on directories");
-    return -EPERM;
+    /* No attributes */
+    return -ENODATA;
   } else {
     DEBUG("Could not find path");
     return -ENOENT;
