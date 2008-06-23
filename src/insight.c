@@ -1036,12 +1036,54 @@ static int insight_unlink(const char *path) {
 }
 
 static int insight_mknod(const char *path, mode_t mode, dev_t rdev) {
-  (void) path;
-  (void) mode;
   (void) rdev;
 
-  DEBUG("Mknod: \"%s\"", path);
-  return -ENOTSUP;
+  if (!S_ISREG(mode)) {
+    DEBUG("Cannot create non-files");
+    return -EPERM;
+  }
+
+  char *canon_path = get_canonical_path(path)+1;
+
+  DEBUG("Mknod: \"%s\"", canon_path);
+  int res=0;
+  int count;
+  char **bits = strsplit(canon_path, '/', &count);
+  canon_path--;
+  ifree(canon_path);
+
+  if (count<2) {
+    DEBUG("Need a tag");
+    res = -EPERM;
+  } else {
+    DEBUG("Assigning tag \"%s\"", bits[count-2]);
+
+    DEBUG("Last returned \"%s\"", bits[count-1]);
+
+    unsigned long hash = hash_path(bits[count-1], strlen(bits[count-1]));
+    DEBUG("Which gives us hash %08lx", hash);
+
+    struct stat fstat;
+
+    if (have_file_by_hash(hash, &fstat)) {
+      res = attr_addbyname(hash, bits[count-2]);
+      if (res) {
+        DEBUG("Error tagging! %s", strerror(-res));
+        return res;
+      }
+
+      DEBUG("Done");
+    } else {
+      DEBUG("Cannot create the file");
+      res = -EPERM;
+    }
+  }
+
+  for (count--;count>=0; count--) {
+    ifree(bits[count]);
+  }
+  ifree(bits);
+  return res;
 }
 
 static int insight_rename(const char *from, const char *to) {
@@ -1369,9 +1411,11 @@ static int insight_utimens(const char *path, const struct timespec tv[2]) {
   DEBUG("Changing times of \"%s\"", path);
 
   struct stat fstat;
+  char *last = strlast(canon_path+1, '/');
+  unsigned long hash = hash_path(last, strlen(last));
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+  if (have_file_by_hash(hash, &fstat)) {
+    char *fullname = fullname_from_inode(hash);
     struct timeval tvv;
     DEBUG("Change times of real file: %s", fullname);
     tvv.tv_sec = tv->tv_sec;
