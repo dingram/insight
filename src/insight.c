@@ -847,7 +847,6 @@ static int insight_mkdir(const char *path, mode_t mode) {
 
   fileptr tree_root=tree_get_root();
   int subtag=0;
-  tdata datan;
   char *parent_tag=rindex(canon_parent, '/');
 
   if (!parent_tag) parent_tag=canon_parent;
@@ -1300,9 +1299,11 @@ static int insight_chmod(const char *path, mode_t mode) {
   DEBUG("Change mode of \"%s\" to %05o", canon_path, mode & 07777);
 
   struct stat fstat;
+  char *last = strlast(canon_path+1, '/');
+  unsigned long hash = hash_path(last, strlen(last));
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+  if (have_file_by_hash(hash, &fstat)) {
+    char *fullname = fullname_from_inode(hash);
     DEBUG("Changing mode of real file: %s", fullname);
     if (chmod(fullname, mode)==-1) {
       PMSG(LOG_ERR, "chmod(\"%s\", %05o) failed: %s", fullname, mode, strerror(errno));
@@ -1355,9 +1356,11 @@ static int insight_chown(const char *path, uid_t uid, gid_t gid) {
   DEBUG("Change ownership of \"%s\" to %d:%d", canon_path, uid, gid);
 
   struct stat fstat;
+  char *last = strlast(canon_path+1, '/');
+  unsigned long hash = hash_path(last, strlen(last));
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+  if (have_file_by_hash(hash, &fstat)) {
+    char *fullname = fullname_from_inode(hash);
     DEBUG("Change ownership of real file: %s", fullname);
     if (chown(fullname, uid, gid)==-1) {
       PMSG(LOG_ERR, "chown(\"%s\", %u, %u) failed: %s", fullname, uid, gid, strerror(errno));
@@ -1382,9 +1385,11 @@ static int insight_truncate(const char *path, off_t size) {
   DEBUG("Truncate \"%s\" to %lld bytes", canon_path, size);
 
   struct stat fstat;
+  char *last = strlast(canon_path+1, '/');
+  unsigned long hash = hash_path(last, strlen(last));
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+  if (have_file_by_hash(hash, &fstat)) {
+    char *fullname = fullname_from_inode(hash);
     DEBUG("Truncating real file: %s", fullname);
     if (truncate(fullname, size)==-1) {
       PMSG(LOG_ERR, "truncate(\"%s\", %lld) failed: %s", fullname, size, strerror(errno));
