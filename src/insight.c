@@ -149,6 +149,66 @@ static struct fuse_operations insight_oper = {
 
 static int usage_printed = 0;
 
+static int tag_ensure_create(const char *tag) {
+  fileptr attrid;
+  size_t len = strlen(tag);
+  char *curtag=calloc(len+1, sizeof(char)); /* TODO: check for failure */
+  strcpy(curtag, tag);
+
+  /* loop backwards to find the closest parent tag that doesn't exist */
+  /* i.e. check foo`bar`qux then foo`bar then foo */
+  DEBUG("Checking \"%s\"", curtag);
+  int found=1;
+  while (!(attrid=get_tag(curtag))) {
+    char *t = rindex(curtag, INSIGHT_SUBKEY_SEP_C);
+    if (t) {
+      *t='\0';
+    } else {
+      found=0;
+      break;
+    }
+    DEBUG("Checking \"%s\"", curtag);
+  }
+
+  if (!attrid) {
+    attrid = tree_get_root();
+  }
+
+  do {
+    /* if found is set then curtag exists... so we skip it and go on to its child */
+    if (!found) {
+      tdata datan;
+
+      /* create curtag */
+      DEBUG("Creating tag \"%s\" as a child of block %lu", curtag, attrid);
+
+      char *the_tag = strlast(curtag, INSIGHT_SUBKEY_SEP_C);
+      initDataNode(&datan);
+      if (!tree_sub_insert(attrid, the_tag, (tblock*)&datan)) {
+        PMSG(LOG_ERR, "Tree insertion failed");
+        return -ENOSPC;
+      }
+      DEBUG("Successfully inserted \"%s\" into parent", curtag);
+      ifree(the_tag);
+
+      attrid = get_tag(curtag);
+      if (!attrid) {
+        PMSG(LOG_ERR, "Could not find the tag I just created!");
+        ifree(curtag);
+        return -EIO;
+      }
+    } else {
+      found=0;
+    }
+    /* if we're done, exit... */
+    if (strlen(curtag)==len) break;
+    /* advance string */
+    curtag[strlen(curtag)]=INSIGHT_SUBKEY_SEP_C;
+  } while (strlen(curtag) <= len);
+
+  ifree(curtag);
+  return attrid;
+}
 
 static int limbo_search(fileptr inode) {
   fileptr *inodes=NULL;
@@ -273,64 +333,8 @@ static int attr_addbyname_rec(fileptr inode, const char *attr) {
     return attr_add(inode, attrid);
   }
 
-  size_t len = strlen(attr);
-  char *curtag=calloc(len+1, sizeof(char)); /* TODO: check for failure */
-  strcpy(curtag, attr);
+  attrid = tag_ensure_create(attr);
 
-  /* loop backwards to find the closest parent tag that doesn't exist */
-  /* i.e. check foo`bar`qux then foo`bar then foo */
-  DEBUG("Checking \"%s\"", curtag);
-  int found=1;
-  while (!(attrid=get_tag(curtag))) {
-    char *t = rindex(curtag, INSIGHT_SUBKEY_SEP_C);
-    if (t) {
-      *t='\0';
-    } else {
-      found=0;
-      break;
-    }
-    DEBUG("Checking \"%s\"", curtag);
-  }
-
-  if (!attrid) {
-    attrid = tree_get_root();
-  }
-
-  do {
-    /* if found is set then curtag exists... so we skip it and go on to its child */
-    if (!found) {
-      tdata datan;
-
-      /* create curtag */
-      DEBUG("Creating tag \"%s\" as a child of block %lu", curtag, attrid);
-
-      char *the_tag = strlast(curtag, INSIGHT_SUBKEY_SEP_C);
-      initDataNode(&datan);
-      if (!tree_sub_insert(attrid, the_tag, (tblock*)&datan)) {
-        PMSG(LOG_ERR, "Tree insertion failed");
-        return -ENOSPC;
-      }
-      DEBUG("Successfully inserted \"%s\" into parent", curtag);
-      ifree(the_tag);
-
-      attrid = get_tag(curtag);
-      if (!attrid) {
-        PMSG(LOG_ERR, "Could not find the tag I just created!");
-        return -EIO;
-      }
-    } else {
-      found=0;
-    }
-    /* if we're done, exit... */
-    if (strlen(curtag)==len) break;
-    /* advance string */
-    curtag[strlen(curtag)]=INSIGHT_SUBKEY_SEP_C;
-  } while (strlen(curtag) <= len);
-
-  DEBUG("Done creating tags");
-
-
-  ifree(curtag);
   return attr_addbyname(inode, attr);
 }
 
@@ -799,6 +803,8 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
 static int insight_mkdir(const char *path, mode_t mode) {
   (void) mode;
 
+  char *canon_path = get_canonical_path(path);
+  char *newtag = strlast(canon_path, '/');
   char *newdir = strlast(path, '/');
   char *dup = strdup(path);
   char *canon_parent = rindex(dup, '/');
@@ -809,13 +815,11 @@ static int insight_mkdir(const char *path, mode_t mode) {
   if (canon_parent[0]=='/')
     canon_parent++;
 
+  if (canon_path[0]=='/')
+    canon_path++;
+
   if (strcmp(newdir, INSIGHT_SUBKEY_IND)==0) {
     PMSG(LOG_WARNING, "Cannot create directories named \"%s\"", INSIGHT_SUBKEY_IND);
-    return -EPERM;
-  }
-
-  if (strcount(newdir, INSIGHT_SUBKEY_SEP_C)) {
-    PMSG(LOG_WARNING, "Cannot create directories that include \"%s\"", INSIGHT_SUBKEY_SEP);
     return -EPERM;
   }
 
@@ -850,8 +854,22 @@ static int insight_mkdir(const char *path, mode_t mode) {
   else             parent_tag++;
 
   while (last_char_in(parent_tag)==INSIGHT_SUBKEY_IND_C) {
-    DEBUG("Subtag");
     last_char_in(parent_tag)='\0';
+    subtag=1;
+  }
+
+  while (last_char_in(newdir)==INSIGHT_SUBKEY_IND_C) {
+    last_char_in(newdir)='\0';
+    subtag=1;
+  }
+
+  while (last_char_in(newtag)==INSIGHT_SUBKEY_IND_C) {
+    last_char_in(newtag)='\0';
+    subtag=1;
+  }
+
+  while (last_char_in(canon_path)==INSIGHT_SUBKEY_IND_C) {
+    last_char_in(canon_path)='\0';
     subtag=1;
   }
 
@@ -868,11 +886,20 @@ static int insight_mkdir(const char *path, mode_t mode) {
 
   DEBUG("About to insert \"%s\" into parent \"%s\"", newdir, parent_tag);
 
+  /*
   initDataNode(&datan);
   if (!tree_sub_insert(tree_root, newdir, (tblock*)&datan)) {
     PMSG(LOG_ERR, "Tree insertion failed");
     return -ENOSPC;
   }
+  */
+
+  DEBUG("Creating tag \"%s\"", newtag);
+  if (!tag_ensure_create(newtag)) {
+    PMSG(LOG_ERR, "Tree insertion failed");
+    return -ENOSPC;
+  }
+
   DEBUG("Successfully inserted \"%s\" into parent \"%s\"", newdir, parent_tag);
 
   return 0;

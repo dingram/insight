@@ -12,11 +12,11 @@
 /** Order of the inode tree - i.e. how many pointers are stored */
 #define DORDER ((TREEBLOCK_SIZE - 2*sizeof(short))/(sizeof(fileptr)+sizeof(fileptr))+1)
 /** Maximum number of inodes in a data block */
-#define DATA_INODE_MAX ((TREEBLOCK_SIZE - sizeof(short) - 2*sizeof(unsigned long))/sizeof(fileptr))
+#define DATA_INODE_MAX ((TREEBLOCK_SIZE - 2*sizeof(short) - 2*sizeof(fileptr) - sizeof(unsigned long))/sizeof(fileptr))
 /** Maximum number of inodes in an inode block */
 #define INODE_MAX ((TREEBLOCK_SIZE - sizeof(short) - 2*sizeof(unsigned long))/sizeof(fileptr))
 /** Maximum number of references in an inode data block */
-#define REF_MAX ((TREEBLOCK_SIZE - sizeof(short) - 2*sizeof(unsigned long))/sizeof(fileptr))
+#define REF_MAX ((TREEBLOCK_SIZE - 2*sizeof(short) - sizeof(unsigned long))/sizeof(fileptr))
 
 /**
  * @defgroup MagicDefs Magic numbers
@@ -89,17 +89,6 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
                                    /** unused space */
   char           unused[TREEBLOCK_SIZE - sizeof(unsigned long) - 2*sizeof(short) - ORDER*(sizeof(fileptr)) - (ORDER-1)*(sizeof(tkey))];
 } tnode;
-
-/** Node in the inode tree */
-typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
-  unsigned long  magic;            /**< Magic number 0xce11b10c */
-  unsigned short leaf;             /**< 0x01 if this node is a leaf node, 0x00 otherwise */
-  unsigned short keycount;         /**< The number of keys in this node */
-  fileptr        ptrs[DORDER];     /**< Addresses of child nodes if not leaf, or of data nodes and next sibling (index 0) if leaf */
-  fileptr        keys[DORDER-1];   /**< The keys stored in this node */
-                                   /** unused space */
-  char           unused[TREEBLOCK_SIZE - sizeof(unsigned long) - 2*sizeof(short) - ORDER*(sizeof(fileptr)) - (ORDER-1)*(sizeof(fileptr))];
-} tdnode;
 
 /** Data block in the tree */
 typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {

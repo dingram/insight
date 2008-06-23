@@ -215,6 +215,17 @@ static int tree_free (fileptr block) {
 int tree_open (char *path) {
   int result;
 
+  /* sanity checks */
+#define BLOCK_TYPE_CHECK(t) do { if (sizeof(t)!=TREEBLOCK_SIZE) { FMSG(LOG_ERR, "Assert failed: %s is %u bytes; should be %u bytes", #t, sizeof(t), TREEBLOCK_SIZE); return EFAULT; } } while (0)
+  BLOCK_TYPE_CHECK(tblock);
+  BLOCK_TYPE_CHECK(freeblock);
+  BLOCK_TYPE_CHECK(tsblock);
+  BLOCK_TYPE_CHECK(tnode);
+  BLOCK_TYPE_CHECK(tdata);
+  BLOCK_TYPE_CHECK(tinode);
+  BLOCK_TYPE_CHECK(tidata);
+#undef BLOCK_TYPE_CHECK
+
   if (tree_fp >= 0) {
     FMSG(LOG_ERR, "Tree already open");
     return EMFILE; /* Too many open files */
@@ -886,6 +897,7 @@ fileptr tree_sub_search(fileptr root, char *key) {
         return 0;
       }
     } else if (node.magic != MAGIC_TREENODE) {
+      PMSG(LOG_ERR, "tree_sub_search(%lu, \"%s\")", root, key);
       PMSG(LOG_ERR, "Invalid magic number (%lX)", node.magic);
       errno=EBADF;
       return 0;
@@ -1769,6 +1781,7 @@ int inode_remove(fileptr block, fileptr inode) {
 int inode_put_all(fileptr block, fileptr *inodes, unsigned int count) {
   tdata datablock;
   unsigned int curinode=0;
+  bzero(&datablock, sizeof(datablock));
 
   DEBUG("inode_put_all(block: %lu, inodes: %lu, count: %d)", block, inodes, count);
 
@@ -1787,7 +1800,10 @@ int inode_put_all(fileptr block, fileptr *inodes, unsigned int count) {
     if (!tree_sb->inode_limbo) {
       DEBUG("Creating inode limbo area");
       tree_sb->inode_limbo = tree_alloc();
+      /*
     } else if (curinode >= count && datablock.next_inodes) {
+      DEBUG("curinode: %lu >= count: %lu", curinode, count);
+      DEBUG("datablock.next_inodes = %lu", datablock.next_inodes);
       DEBUG("Freeing inode block chain");
       if (inode_free_chain(datablock.next_inodes)) {
         PMSG(LOG_ERR, "Could not free inode chain");
@@ -1795,6 +1811,7 @@ int inode_put_all(fileptr block, fileptr *inodes, unsigned int count) {
       }
       tree_sb->inode_limbo=0;
       tree_write_sb(tree_sb);
+      */
     }
 
     datablock.next_inodes = tree_sb->inode_limbo;
