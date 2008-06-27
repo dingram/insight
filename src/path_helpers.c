@@ -109,7 +109,12 @@ char *get_canonical_path(const char *path) {
   }
 
   DEBUG("Freeing bits");
-  //ifree(bits);
+
+  for (slashcount--;slashcount>=0; slashcount--) {
+    ifree(bits[slashcount]);
+  }
+  ifree(bits);
+
   DEBUG("Bits free");
 
   if (!strlen(tmp)) {
