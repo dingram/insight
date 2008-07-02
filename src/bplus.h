@@ -2,7 +2,7 @@
 #define __BPLUS_H
 
 /** Default number of blocks to create in new storage file */
-#define DEFAULT_BLOCKS 512
+#define DEFAULT_BLOCKS 2048
 /** Tree block size */
 #define TREEBLOCK_SIZE 512
 /** Maximum key length including terminating null */

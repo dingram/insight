@@ -1209,6 +1209,7 @@ static int insight_symlink(const char *from, const char *to) {
     sprintf(attr, "_owner%s%s", INSIGHT_SUBKEY_SEP, p->pw_name);
     DEBUG("  ... attr_addbyname(%lu, \"%s\");", hash, attr);
     attr_addbyname_rec(hash, attr);
+    endpwent();
   } else {
     PMSG(LOG_ERR, "Failed to get username for uid %u", s.st_uid);
   }
@@ -1220,6 +1221,7 @@ static int insight_symlink(const char *from, const char *to) {
     sprintf(attr, "_group%s%s", INSIGHT_SUBKEY_SEP, g->gr_name);
     DEBUG("  ... attr_addbyname(%lu, \"%s\");", hash, attr);
     attr_addbyname_rec(hash, attr);
+    endgrent();
   } else {
     PMSG(LOG_ERR, "Failed to get group name for gid %u", s.st_gid);
   }
@@ -1237,6 +1239,9 @@ static int insight_symlink(const char *from, const char *to) {
   }
 
   DEBUG("Done.");
+
+  ifree(basename);
+  ifree(ext);
 
   return 0;
 }
@@ -1491,6 +1496,7 @@ static int insight_open(const char *path, struct fuse_file_info *fi) {
       PMSG(LOG_ERR, "open(\"%s\", %d) failed: %s", fullname, fi->flags, strerror(errno));
       ifree(last);
       ifree(fullname);
+      ifree(canon_path);
       return -errno;
     } else {
       DEBUG("Open succeeded; closing file");
@@ -1499,16 +1505,19 @@ static int insight_open(const char *path, struct fuse_file_info *fi) {
       ifree(last);
       DEBUG("Freeing fullname");
       ifree(fullname);
+      ifree(canon_path);
       DEBUG("Done");
       return 0;
     }
   } else if (validate_path(canon_path)) {
     PMSG(LOG_ERR, "Cannot open directories like files!");
     ifree(last);
+    ifree(canon_path);
     return -EISDIR;
   } else {
     DEBUG("Could not find path");
     ifree(last);
+    ifree(canon_path);
     return -ENOENT;
   }
 }
@@ -1530,6 +1539,7 @@ static int insight_read(const char *path, char *buf, size_t size, off_t offset, 
       PMSG(LOG_ERR, "open(\"%s\", %d) failed: %s", fullname, fi->flags, strerror(errno));
       ifree(fullname);
       ifree(last);
+      ifree(canon_path);
       return -errno;
     } else {
       int res, tmp_errno=0;
@@ -1538,15 +1548,18 @@ static int insight_read(const char *path, char *buf, size_t size, off_t offset, 
       close(fd);
       ifree(fullname);
       ifree(last);
+      ifree(canon_path);
       return (res==-1)?-tmp_errno:res;
     }
   } else if (validate_path(canon_path)) {
     PMSG(LOG_ERR, "Cannot read directories like files!");
     ifree(last);
+    ifree(canon_path);
     return -EISDIR;
   } else {
     DEBUG("Could not find path");
     ifree(last);
+    ifree(canon_path);
     return -ENOENT;
   }
 }
@@ -1568,6 +1581,7 @@ static int insight_write(const char *path, const char *buf, size_t size, off_t o
       PMSG(LOG_ERR, "open(\"%s\", %d) failed: %s", fullname, fi->flags, strerror(errno));
       ifree(fullname);
       ifree(last);
+      ifree(canon_path);
       return -errno;
     } else {
       int res, tmp_errno=0;
@@ -1576,15 +1590,18 @@ static int insight_write(const char *path, const char *buf, size_t size, off_t o
       close(fd);
       ifree(fullname);
       ifree(last);
+      ifree(canon_path);
       return (res==-1)?-tmp_errno:res;
     }
   } else if (validate_path(canon_path)) {
     PMSG(LOG_ERR, "Cannot write to directories like files!");
     ifree(last);
+    ifree(canon_path);
     return -EISDIR;
   } else {
     DEBUG("Could not find path");
     ifree(last);
+    ifree(canon_path);
     return -ENOENT;
   }
 }
