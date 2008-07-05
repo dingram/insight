@@ -1433,16 +1433,24 @@ static int insight_utimens(const char *path, const struct timespec tv[2]) {
     if (utimes(fullname, &tvv)==-1) {
       PMSG(LOG_ERR, "utimes(\"%s\", tv) failed: %s", fullname, strerror(errno));
       ifree(fullname);
+      ifree(last);
+      ifree(canon_path);
       return -errno;
     } else {
       ifree(fullname);
+      ifree(last);
+      ifree(canon_path);
       return 0;
     }
   } else if (validate_path(canon_path)) {
     DEBUG("Cannot change times of directories");
+    ifree(last);
+    ifree(canon_path);
     return -EPERM;
   } else {
     DEBUG("Could not find path");
+    ifree(last);
+    ifree(canon_path);
     return -ENOENT;
   }
 }
@@ -1628,7 +1636,6 @@ static int insight_statfs(const char *path, struct statfs *stbuf) {
 #endif
 
 static int insight_release(const char *path, struct fuse_file_info *fi) {
-  (void) path;
   (void) fi;
 
   DEBUG("Release on \"%s\"", path);
@@ -1637,7 +1644,6 @@ static int insight_release(const char *path, struct fuse_file_info *fi) {
 }
 
 static int insight_fsync(const char *path, int isdatasync, struct fuse_file_info *fi) {
-  (void) path;
   (void) isdatasync;
   (void) fi;
 
@@ -1646,7 +1652,6 @@ static int insight_fsync(const char *path, int isdatasync, struct fuse_file_info
 }
 
 static int insight_access(const char *path, int mode) {
-  (void) path;
   (void) mode;
 
   DEBUG("access() called on \"%s\"", path);
@@ -1690,7 +1695,9 @@ static int insight_setxattr(const char *path, const char *name, const char *valu
       DEBUG("Set attribute of real file: %s", fullname);
       int res = setxattr(fullname, name, value, size, flags);
       if (res==-1) {
-        PMSG(LOG_ERR, "setxattr(\"%s\", \"%s\", ...) failed: %s", fullname, name, strerror(errno));
+        if (errno != ENOTSUP) {
+          PMSG(LOG_ERR, "setxattr(\"%s\", \"%s\", ...) failed: %s", fullname, name, strerror(errno));
+        }
         ifree(fullname);
         ifree(canon_path);
         return -errno;
@@ -1726,7 +1733,7 @@ static int insight_getxattr(const char *path, const char *name, char *value, siz
     DEBUG("Get attribute of real file: %s", fullname);
     int res = getxattr(fullname, name, value, size);
     if (res==-1) {
-      if (errno != ENODATA) {
+      if (errno != ENODATA && errno != ENOTSUP) {
         /* perfectly normal */
         PMSG(LOG_ERR, "getxattr(\"%s\", \"%s\", ...) failed: %s\n", fullname, name, strerror(errno));
       }
@@ -1766,7 +1773,9 @@ static int insight_listxattr(const char *path, char *list, size_t size) {
     DEBUG("List attributes of real file: %s", fullname);
     int res = listxattr(fullname, list, size);
     if (res==-1) {
-      PMSG(LOG_ERR, "listxattr(\"%s\", ...) failed: %s\n", fullname, strerror(errno));
+      if (errno != ENOTSUP) {
+        PMSG(LOG_ERR, "listxattr(\"%s\", ...) failed: %s\n", fullname, strerror(errno));
+      }
       ifree(fullname);
       ifree(canon_path);
       return -errno;
@@ -1814,7 +1823,9 @@ static int insight_removexattr(const char *path, const char *name) {
       DEBUG("Remove attribute of real file: %s", fullname);
       int res = removexattr(fullname, name);
       if (res==-1) {
-        PMSG(LOG_ERR, "removexattr(\"%s\", \"%s\") failed: %s", fullname, name, strerror(errno));
+        if (errno != ENOTSUP) {
+          PMSG(LOG_ERR, "removexattr(\"%s\", \"%s\") failed: %s", fullname, name, strerror(errno));
+        }
         ifree(fullname);
         ifree(canon_path);
         return -errno;

@@ -1384,7 +1384,7 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
         if (rightsteal<0) rightsteal=0;
         DEBUG("Handing %u keys to left node, %u to right", leftsteal, rightsteal);
         if (!leftsteal && !rightsteal) {
-          PMSG(LOG_ERR, "\033[1;5;31mPANIC AT THE TREE! CAN'T FIND ANY SIBLINGS! ARGH!\033[m");
+          PMSG(LOG_ERR, "PANIC AT THE TREE! CAN'T FIND ANY SIBLINGS! ARGH!");
           return -EIO;
         }
         /* give keys and pointers to the left sibling */
@@ -1822,6 +1822,7 @@ int inode_put_all(fileptr block, fileptr *inodes, unsigned int count) {
     datablock.inodecount = MIN(count, DATA_INODE_MAX);
     memcpy(datablock.inodes, inodes, datablock.inodecount*sizeof(fileptr));
     curinode += datablock.inodecount;
+    datablock.inodecount = count;
 
     if (curinode<count && !datablock.next_inodes) {
       DEBUG("Creating inode block");
@@ -2081,7 +2082,7 @@ int inode_get_all(fileptr block, fileptr *inodes, unsigned int max) {
       return -EBADF;
     }
     if (curinode + ib.inodecount > datablock.inodecount) {
-      PMSG(LOG_WARNING, "Inode block stores more inodes than the data block says!");
+      PMSG(LOG_WARNING, "Inode block %lu stores more inodes (%u) than the data block %lu says (%u)!", inodeptr, ib.inodecount, block, datablock.inodecount);
       return 0;
     } else if (curinode + ib.inodecount > max) {
       PMSG(LOG_WARNING, "Did not allocate enough space for all inodes; truncating");
