@@ -1,6 +1,8 @@
 #ifndef __BPLUS_H
 #define __BPLUS_H
 
+#include <sys/types.h>
+
 /** Default number of blocks to create in new storage file */
 #define DEFAULT_BLOCKS 2048
 /** Tree block size */

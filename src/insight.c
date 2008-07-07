@@ -978,7 +978,7 @@ static int insight_rmdir(const char *path) {
 
 static int insight_unlink(const char *path) {
   unsigned long hash;
-  char *canon_path = get_canonical_path(path+1);
+  char *canon_path = get_canonical_path(path);
 
   /* TODO: check paths are valid and exist! */
 
@@ -986,11 +986,13 @@ static int insight_unlink(const char *path) {
 
   if (!*canon_path) {
     FMSG(LOG_ERR, "Asked to unlink file with null path!");
+    ifree(canon_path);
     return -EINVAL;
   }
 
   if (strcount(canon_path+1, '/')>1) {
     DEBUG("Only makes sense to remove from single-level directories");
+    ifree(canon_path);
     return -EPERM;
   }
 
@@ -1001,6 +1003,11 @@ static int insight_unlink(const char *path) {
   fileptr attrid=0;
   int count;
   char **bits = strsplit(canon_path, '/', &count);
+
+  while (!*(bits[count-1])) {
+    ifree(bits[count-1]);
+    count--;
+  }
 
   /* calculate an inode number for the path */
   DEBUG("Hashing \"%s\"...", bits[count-1]);
@@ -1019,6 +1026,7 @@ static int insight_unlink(const char *path) {
     ifree(bits[count]);
   }
   ifree(bits);
+  ifree(canon_path);
 
   /* remove attribute */
   int res = attr_del(hash, attrid);
@@ -1027,9 +1035,6 @@ static int insight_unlink(const char *path) {
     DEBUG("Error deleting attribute");
     return res;
   }
-
-  /* XXX: segfaults */
-  /* ifree(canon_path); */
 
   return 0;
 }
@@ -1415,7 +1420,7 @@ static int insight_truncate(const char *path, off_t size) {
 
 #if FUSE_VERSION >= 26
 
-static int insight_utimens(const char *path, const struct timespec tv[2]) {
+static int insight_utimens(const char *path, const struct timespec ts[2]) {
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Changing times of \"%s\"", path);
@@ -1426,11 +1431,13 @@ static int insight_utimens(const char *path, const struct timespec tv[2]) {
 
   if (have_file_by_hash(hash, &fstat)) {
     char *fullname = fullname_from_inode(hash);
-    struct timeval tvv;
+    struct timeval tv[2];
     DEBUG("Change times of real file: %s", fullname);
-    tvv.tv_sec = tv->tv_sec;
-    tvv.tv_usec = tv->tv_nsec / 1000;
-    if (utimes(fullname, &tvv)==-1) {
+    tv[0].tv_sec = ts[0].tv_sec;
+    tv[0].tv_usec = ts[0].tv_nsec / 1000;
+    tv[1].tv_sec = ts[1].tv_sec;
+    tv[1].tv_usec = ts[1].tv_nsec / 1000;
+    if (utimes(fullname, tv)==-1) {
       PMSG(LOG_ERR, "utimes(\"%s\", tv) failed: %s", fullname, strerror(errno));
       ifree(fullname);
       ifree(last);
@@ -1636,6 +1643,7 @@ static int insight_statfs(const char *path, struct statfs *stbuf) {
 #endif
 
 static int insight_release(const char *path, struct fuse_file_info *fi) {
+  (void) path;
   (void) fi;
 
   DEBUG("Release on \"%s\"", path);
@@ -1644,6 +1652,7 @@ static int insight_release(const char *path, struct fuse_file_info *fi) {
 }
 
 static int insight_fsync(const char *path, int isdatasync, struct fuse_file_info *fi) {
+  (void) path;
   (void) isdatasync;
   (void) fi;
 
@@ -1652,6 +1661,7 @@ static int insight_fsync(const char *path, int isdatasync, struct fuse_file_info
 }
 
 static int insight_access(const char *path, int mode) {
+  (void) path;
   (void) mode;
 
   DEBUG("access() called on \"%s\"", path);

@@ -57,7 +57,7 @@ typedef struct {
 static cache_ent *block_cache;
 
 /** Maximum number of times to update a block inside the cache before writing it to disk and resetting write count. For safety. */
-#define CACHE_MAX_WRITES 5
+#define CACHE_MAX_WRITES 25
 
 /** Maximum size of cache in bytes (1MiB) */
 #define CACHE_MAX_SIZE (1024*1024)
@@ -107,5 +107,16 @@ static inline int tree_get_cache_loc(fileptr block) {
 }
 #endif
 
+#ifndef ifree
+/** free() with guard to avoid double-freeing anything */
+#define ifree(x) do {\
+	if (x) {\
+		free(x);\
+		x = NULL;\
+	} else {\
+		PMSG(LOG_ERR, "ERROR in free(): %s is NULL!", #x);\
+	}\
+} while (0)
+#endif
 
 #endif

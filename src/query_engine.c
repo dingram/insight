@@ -332,6 +332,7 @@ static int _path_to_query_proc(const char *str, unsigned long data) {
     tdata dblock;
     if (tree_read(is_tag, (tblock*)&dblock)) {
       PMSG(LOG_ERR, "I/O error reading block\n");
+      qtree_free(qroot, 1);
       return -EIO;
     }
     if (dblock.flags & DATA_FLAGS_NOSUB) {
@@ -345,6 +346,7 @@ static int _path_to_query_proc(const char *str, unsigned long data) {
 
   } else {
     DEBUG("Tag \"%s\" does not exist");
+    qtree_free(qroot, 1);
     return -ENOENT;
   }
 
@@ -370,6 +372,7 @@ qelem *path_to_query(const char *path) {
   DEBUG("Canonical path: \"%s\"", path);
   if (!dup || errno) {
     DEBUG("Error in get_canonical_path()");
+    if (dup) ifree(dup);
     errno=ENOENT;
     return NULL;
   }
@@ -392,11 +395,13 @@ qelem *path_to_query(const char *path) {
       DEBUG("Success");
     } else if (res==-ENOENT) {
       DEBUG("A component of the path does not exist");
+      qtree_free(&qroot, 1);
       ifree(dup);
       errno=ENOENT;
       return NULL;
     } else {
       DEBUG("Problem with strsplitmap");
+      qtree_free(&qroot, 1);
       ifree(dup);
       errno=-res;
       return NULL;
@@ -405,6 +410,8 @@ qelem *path_to_query(const char *path) {
     if (_qtree_contains(qroot, QUERY_IS_INODE) && !query_inode_count(qroot)) {
       /* cannot find that inode with the query */
       DEBUG("Could not find the given file");
+      qtree_free(&qroot, 1);
+      ifree(dup);
       errno=ENOENT;
       return NULL;
     }
@@ -604,8 +611,6 @@ fileptr *query_to_inodes(const qelem * const query, int * const count, int * con
       {
         fileptr dblock = get_tag(query->tag);
 
-        /* TODO: get all subkeys */
-
         DEBUG("IS: fetching recursive list of inodes from block %lu, negation 0", dblock);
         *neg=0;
         fileptr *inodes = inode_get_all_recurse(dblock, count);
@@ -700,7 +705,7 @@ fileptr *query_to_inodes(const qelem * const query, int * const count, int * con
         }
         fileptr *res2 = query_to_inodes(query->next[1], &count2, &neg2);
         if (!res2) {
-          DEBUG("Error in left branch");
+          DEBUG("Error in right branch");
           ifree(res1);
           return NULL;
         }
@@ -758,8 +763,75 @@ fileptr *query_to_inodes(const qelem * const query, int * const count, int * con
        *  negation flag set
        *  * Otherwise: output is ???
        */
-      PMSG(LOG_ERR, "Cannot handle OR queries yet!");
-      return NULL;
+      {
+        PMSG(LOG_ERR, "Cannot handle OR queries yet!");
+        return NULL;
+
+        DEBUG("OR: Disjunction of two query subtrees");
+        int count1=0, count2=0, neg1=0, neg2=0;
+        fileptr *res1 = query_to_inodes(query->next[0], &count1, &neg1);
+        if (!res1) {
+          DEBUG("Error in left branch");
+          return NULL;
+        }
+        fileptr *res2 = query_to_inodes(query->next[1], &count2, &neg2);
+        if (!res2) {
+          DEBUG("Error in right branch");
+          ifree(res1);
+          return NULL;
+        }
+        if (!count1 && !neg1) {
+          /* no need to perform set operations */
+          DEBUG("Short-circuit: first branch yielded no results");
+          *count=0;
+          *neg=neg2;
+          ifree(res1);
+          return res2;
+        }
+        if (!count2 && !neg2) {
+          /* no need to perform set operations */
+          DEBUG("Short-circuit: second branch yielded no results");
+          *count=0;
+          *neg=neg1;
+          ifree(res2);
+          return res1;
+        }
+        /* both subtrees returned results */
+        if (!neg1 && !neg2) {
+          fileptr *res = calloc(count1 + count2, sizeof(fileptr));
+          if (!res) {
+            PMSG(LOG_ERR, "Failed to allocate memory for return array");
+            ifree(res1);
+            ifree(res2);
+            return NULL;
+          }
+          /* output is the union of subqueries, with negation flag clear */
+          *neg=0;
+          *count=set_union(res1, res2, res, count1, count2, MIN(count1, count2), sizeof(fileptr), inodecmp);
+          if (*count < 0) {
+            PMSG(LOG_ERR, "Error in set union operation.");
+            ifree(res1);
+            ifree(res2);
+            ifree(res);
+            return NULL;
+          } else {
+            DEBUG("Set union succeeded; %d results", *count);
+            ifree(res1);
+            ifree(res2);
+            return res;
+          }
+        /* } else if (neg1 && neg2) { */
+          /* output is union of subqueries, with negation flag set */
+        /* } else { */
+          /* output is set difference, with the negation-true set removed from
+           * the negation-false set, and the negation flag cleared */
+        } else {
+          PMSG(LOG_ERR, "Unhandled case in AND");
+          ifree(res1);
+          ifree(res2);
+          return NULL;
+        }
+      }
       break;
 
     default:

@@ -1,4 +1,3 @@
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <fcntl.h>
@@ -904,7 +903,7 @@ fileptr tree_sub_search(fileptr root, char *key) {
     }
 
     DEBUG("Checking node at block %lu\n", root);
-    DUMPNODE(&node);
+    //DUMPNODE(&node);
 
     index=tree_find_key(&node, key);
     if (node.leaf) break;
@@ -1681,15 +1680,20 @@ int inode_insert(fileptr block, fileptr inode) {
   }
   if (inode_get_all(block, inodes, count)<0) {
     PMSG(LOG_ERR, "Failed to get inode array from block %lu", block);
-    free(inodes);
+    ifree(inodes_new);
+    ifree(inodes);
     return EIO;
   }
 
   /* insert node */
-  set_union(inodes, &inode, inodes_new, count, 1, count+1, sizeof(fileptr), inodecmp);
+  int res = set_union(inodes, &inode, inodes_new, count, 1, count+1, sizeof(fileptr), inodecmp);
+  if (res<0) {
+    PMSG(LOG_ERR, "Set union failed!");
+    return -res;
+  }
 
   /* save array back to target block */
-  if (inode_put_all(block, inodes_new, count+1)<0) {
+  if (inode_put_all(block, inodes_new, res)<0) {
     PMSG(LOG_ERR, "Failed to save inode array to block %lu", block);
     free(inodes_new);
     free(inodes);
@@ -1836,6 +1840,7 @@ int inode_put_all(fileptr block, fileptr *inodes, unsigned int count) {
       datablock.next_inodes=0;
     }
 
+    DUMPBLOCK((tblock*)&datablock);
     if (tree_write(block, (tblock*)&datablock)) {
       PMSG(LOG_ERR, "Problem writing data block");
       return -EIO;
@@ -1848,10 +1853,15 @@ int inode_put_all(fileptr block, fileptr *inodes, unsigned int count) {
   DUMPUINT(curinode);
   DUMPUINT(count);
   for (inodeptr = datablock.next_inodes; curinode<count; inodeptr=ib.next_inodes) {
+    if (!inodeptr) {
+      PMSG(LOG_ERR, "Followed a null pointer!");
+      return -EIO;
+    }
     if (tree_read(inodeptr, (tblock*)&ib)) {
       PMSG(LOG_ERR, "Problem verifying inode block");
       return -EIO;
     }
+    DUMPBLOCK((tblock*)&ib);
 
     if (ib.magic == MAGIC_FREEBLOCK) {
       /* XXX: taking a big chance here */
@@ -1861,6 +1871,7 @@ int inode_put_all(fileptr block, fileptr *inodes, unsigned int count) {
       return -EIO;
     }
     ib.inodecount = MIN(count-curinode, INODE_MAX);
+    DEBUG("Copying %u inodes from user buffer (start: %u) to disk block %lu", ib.inodecount, curinode, inodeptr);
     memcpy(ib.inodes, &inodes[curinode], ib.inodecount*sizeof(fileptr));
     curinode += ib.inodecount;
     if (curinode<count && !ib.next_inodes) {
@@ -1872,10 +1883,17 @@ int inode_put_all(fileptr block, fileptr *inodes, unsigned int count) {
         PMSG(LOG_ERR, "Failed to allocate another inode block");
         return -ENOSPC;
       }
-      curinode += MIN(ib.inodecount, INODE_MAX);
+      DEBUG("New inode block number: %lu", ib.next_inodes);
     } else if (curinode >= count && ib.next_inodes) {
-      DEBUG("Freeing chain");
+      DEBUG("Freeing chain starting at block %lu", ib.next_inodes);
+      if (inode_free_chain(ib.next_inodes)) {
+        PMSG(LOG_ERR, "Could not free inode chain");
+        return -EIO;
+      }
+      ib.next_inodes=0;
+      DEBUG("Chain freed");
     }
+    DUMPBLOCK((tblock*)&ib);
     if (tree_write(inodeptr, (tblock*)&ib)) {
       PMSG(LOG_ERR, "Problem writing data block");
       return -EIO;
@@ -2073,7 +2091,7 @@ int inode_get_all(fileptr block, fileptr *inodes, unsigned int max) {
   /* read last inode pointer of block while( nextptr = ((tinode*)&dblock)->inodes[INODE_MAX-1] ), and free that block */
   for (inodeptr = datablock.next_inodes; inodeptr; inodeptr=ib.next_inodes) {
     DEBUG("Following pointer... to block %lu", inodeptr);
-    if (tree_read(inodeptr, (tblock*)&ib) || ib.magic!=MAGIC_INODEBLOCK) {
+    if (tree_read(inodeptr, (tblock*)&ib)) {
       PMSG(LOG_ERR, "Problem reading inode block");
       return -EIO;
     }

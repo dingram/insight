@@ -144,6 +144,7 @@ struct insight {
 
 /*extern*/ struct insight insight;
 
+#ifndef ifree
 /** free() with guard to avoid double-freeing anything */
 #define ifree(x) do {\
 	if (x) {\
@@ -153,3 +154,4 @@ struct insight {
 		PMSG(LOG_ERR, "ERROR in free(): %s is NULL!", #x);\
 	}\
 } while (0)
+#endif
