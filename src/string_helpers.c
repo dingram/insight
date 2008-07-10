@@ -302,3 +302,7 @@ unsigned long hash_path(const char *path, int len) {
 
 	return h0 ^ h1;
 }
+
+unsigned long get_inode(const char *path) {
+  return hash_path(path, strlen(path));
+}

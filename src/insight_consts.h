@@ -1,5 +1,5 @@
-#ifndef __SET_OPS_H
-#define __SET_OPS_H
+#ifndef __INSIGHT_CONSTS_H
+#define __INSIGHT_CONSTS_H
 /*
  * Copyright (C) 2008 David Ingram
  *
@@ -30,11 +30,24 @@
  * Your fair use and other rights are in no way affected by the above.
  */
 
-int inodecmp(const void *p1, const void *p2);
-int pstrcmp(const void *p1, const void *p2);
-int set_union(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
-int set_intersect(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
-int set_diff(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
-int set_uniq(void *set, void *out, size_t in_count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
+/*
+ * NOTE:
+ * -----
+ * Subkey separator and indicator characters should NOT be from the set:
+ *    < > : " / \ | * ?
+ * for compatability with Windows systems.
+ */
+
+/** String used to separate subkey parts (e.g. the "." in "type.music") */
+#define INSIGHT_SUBKEY_SEP "`"
+
+/** String used to indicate subkey to follow (e.g. the ":" in "/type:") */
+#define INSIGHT_SUBKEY_IND ":"
+
+/** Character used to separate subkey parts (e.g. the "." in "type.music") */
+#define INSIGHT_SUBKEY_SEP_C '`'
+
+/** Character used to indicate subkey to follow (e.g. the ":" in "/type:") */
+#define INSIGHT_SUBKEY_IND_C ':'
 
 #endif

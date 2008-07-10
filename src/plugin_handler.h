@@ -1,5 +1,5 @@
-#ifndef __SET_OPS_H
-#define __SET_OPS_H
+#ifndef __PLUGIN_HANDLER_H
+#define __PLUGIN_HANDLER_H
 /*
  * Copyright (C) 2008 David Ingram
  *
@@ -30,11 +30,24 @@
  * Your fair use and other rights are in no way affected by the above.
  */
 
-int inodecmp(const void *p1, const void *p2);
-int pstrcmp(const void *p1, const void *p2);
-int set_union(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
-int set_intersect(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
-int set_diff(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
-int set_uniq(void *set, void *out, size_t in_count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
+#ifdef MACOSX
+#	define PLUGIN_EXT ".dylib"
+#else
+#	define PLUGIN_EXT ".so"
+#endif
+
+#include <insight_plugin.h>
+
+/* process the plugin chain */
+int plugin_process_chmod(const char *original_path, const char *filename, mode_t mode);
+int plugin_process_chown(const char *original_path, const char *filename, uid_t uid, gid_t gid);
+int plugin_process_write(const char *original_path, const char *filename);
+int plugin_process_rename(const char *original_path, const char *oldname, const char *newname);
+int plugin_process_import(const char *original_path, const char *filename);
+
+/* load/unload plugins */
+int plugin_load(const char *plugin_dir, const char *plugin_filename);
+int plugin_load_all(const char *plugin_dir);
+int plugin_unload_all();
 
 #endif

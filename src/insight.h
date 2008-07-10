@@ -73,10 +73,10 @@
 #include <sys/time.h>
 #include <utime.h>
 #include <signal.h>
-#include <syslog.h>
 #include <unistd.h>
 #include <pwd.h>
 #include <grp.h>
+#include <plugin_handler.h>
 
 #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
@@ -101,25 +101,7 @@
 #define MIN3(a,b,c)   (MIN(a, MIN(b, c)))
 #endif
 
-/*
- * NOTE:
- * -----
- * Subkey separator and indicator characters should NOT be from the set:
- *    < > : " / \ | * ?
- * for compatability with Windows systems.
- */
-
-/** String used to separate subkey parts (e.g. the "." in "type.music") */
-#define INSIGHT_SUBKEY_SEP "`"
-
-/** String used to indicate subkey to follow (e.g. the ":" in "/type:") */
-#define INSIGHT_SUBKEY_IND ":"
-
-/** Character used to separate subkey parts (e.g. the "." in "type.music") */
-#define INSIGHT_SUBKEY_SEP_C '`'
-
-/** Character used to indicate subkey to follow (e.g. the ":" in "/type:") */
-#define INSIGHT_SUBKEY_IND_C ':'
+#include <insight_consts.h>
 
 /** Macro for last character in a string */
 #define last_char_in(x) ((x)[strlen(x)-1])
@@ -140,6 +122,8 @@ struct insight {
   char  *treestore;     /**< Path to the tree storage file */
   char  *repository;    /**< Path to the symlink repository */
   struct stat mountstat; /**< lstat() results for mountpoint */
+  struct insight_plugin *plugins; /**< Linked list of plugins */
+  struct insight_funcs funcs; /**< Set of functions for export to plugins */
 };
 
 /*extern*/ struct insight insight;
@@ -155,3 +139,5 @@ struct insight {
 	}\
 } while (0)
 #endif
+
+void insight_log(int level, const char *format, ...);

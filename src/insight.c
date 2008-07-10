@@ -38,6 +38,7 @@
 #include <string_helpers.h>
 #include <query_engine.h>
 #include <set_ops.h>
+#include <stdarg.h>
 
 static int   insight_getattr(const char *path, struct stat *stbuf);
 static int   insight_readlink(const char *path, char *buf, size_t size);
@@ -150,6 +151,7 @@ static struct fuse_operations insight_oper = {
 static int usage_printed = 0;
 
 static int tag_ensure_create(const char *tag) {
+  profile_init_start();
   fileptr attrid;
   size_t len = strlen(tag);
   char *curtag=calloc(len+1, sizeof(char)); /* TODO: check for failure */
@@ -186,6 +188,7 @@ static int tag_ensure_create(const char *tag) {
       initDataNode(&datan);
       if (!tree_sub_insert(attrid, the_tag, (tblock*)&datan)) {
         PMSG(LOG_ERR, "Tree insertion failed");
+        profile_stop();
         return -ENOSPC;
       }
       DEBUG("Successfully inserted \"%s\" into parent", curtag);
@@ -195,6 +198,7 @@ static int tag_ensure_create(const char *tag) {
       if (!attrid) {
         PMSG(LOG_ERR, "Could not find the tag I just created!");
         ifree(curtag);
+        profile_stop();
         return -EIO;
       }
     } else {
@@ -207,10 +211,12 @@ static int tag_ensure_create(const char *tag) {
   } while (strlen(curtag) <= len);
 
   ifree(curtag);
+  profile_stop();
   return attrid;
 }
 
 static int limbo_search(fileptr inode) {
+  profile_init_start();
   fileptr *inodes=NULL;
   int i, count = inode_get_all(0, NULL, 0);
   if (count>0) {
@@ -218,9 +224,11 @@ static int limbo_search(fileptr inode) {
     inode_get_all(0, inodes, count);
   } else if (count==0) {
     /* can't be found if no inodes in list */
+    profile_stop();
     return 0;
   } else if (count<0) {
     DEBUG("Error calling inode_get_all(): %s", strerror(-count));
+    profile_stop();
     return count;
   }
 
@@ -229,16 +237,19 @@ static int limbo_search(fileptr inode) {
       break;
   }
   ifree(inodes);
+  profile_stop();
   return (i<count)?(i+1):0;
 }
 
 static int attr_add(fileptr inode, fileptr attrid) {
+  profile_init_start();
   DEBUG("attr_add(inode: %08lx, attrid: %lu)", inode, attrid);
   char s_hash[9];
   sprintf(s_hash, "%08lX", inode);
 
   if (!attrid) {
     DEBUG("Cannot add null attribute");
+    profile_stop();
     return -ENOENT;
   }
 
@@ -247,6 +258,7 @@ static int attr_add(fileptr inode, fileptr attrid) {
 
   if (searchres<0) {
     DEBUG("Error searching limbo");
+    profile_stop();
     return searchres;
   }
 
@@ -256,6 +268,7 @@ static int attr_add(fileptr inode, fileptr attrid) {
     DEBUG("Removing inode from limbo");
     if ((errno=inode_remove(0, inode))) {
       PMSG(LOG_ERR, "IO error: Failed to remove inode from limbo: %s", strerror(errno));
+      profile_stop();
       return -EIO;
     }
 
@@ -265,6 +278,7 @@ static int attr_add(fileptr inode, fileptr attrid) {
     initInodeDataBlock(&iblock);
     if (!tree_sub_insert(tree_get_iroot(), s_hash, (tblock*)&iblock)) {
       PMSG(LOG_ERR, "Tree insertion failed");
+      profile_stop();
       return -ENOSPC;
     }
 
@@ -274,6 +288,7 @@ static int attr_add(fileptr inode, fileptr attrid) {
     if (res) {
       DEBUG("Inode addition failed: %s", strerror(res));
       if (res==ENOENT) res=EPERM;
+      profile_stop();
       return -res;
     }
   } else {
@@ -286,6 +301,7 @@ static int attr_add(fileptr inode, fileptr attrid) {
 
     if (tree_read(piblock, (tblock*)&iblock)) {
       PMSG(LOG_ERR, "IO error reading inode data block");
+      profile_stop();
       return -EIO;
     }
 
@@ -296,6 +312,7 @@ static int attr_add(fileptr inode, fileptr attrid) {
 
     if (tree_write(piblock, (tblock*)&iblock)) {
       PMSG(LOG_ERR, "IO error writing inode data block");
+      profile_stop();
       return -EIO;
     }
 
@@ -305,40 +322,61 @@ static int attr_add(fileptr inode, fileptr attrid) {
     if (res) {
       DEBUG("Inode insertion failed: %s", strerror(res));
       if (res==ENOENT) res=EPERM;
+      profile_stop();
       return -res;
     }
   }
+  profile_stop();
   return 0;
 }
 
 static int attr_addbyname(fileptr inode, const char *attr) {
+  profile_init_start();
   if (!attr || !*attr) {
+    profile_stop();
     return -EINVAL;
   }
   fileptr attrid = get_tag(attr);
   if (!attrid) {
+    profile_stop();
     return -ENOENT;
   }
+  profile_stop();
   return attr_add(inode, attrid);
 }
 
 static int attr_addbyname_rec(fileptr inode, const char *attr) {
+  profile_init_start();
   if (!attr || !*attr) {
+    profile_stop();
     return -EINVAL;
   }
 
   fileptr attrid = get_tag(attr);
   if (attrid) {
     /* easy case - tag exists */
+    profile_stop();
     return attr_add(inode, attrid);
   }
 
   attrid = tag_ensure_create(attr);
 
+  profile_stop();
   return attr_addbyname(inode, attr);
 }
 
+static int auto_attr_addbyname_rec(fileptr inode, const char *attr) {
+  /* make attribute an "automatic" one */
+  char *auto_attr=calloc(strlen(attr)+2, sizeof(char));
+  strcat(auto_attr, "_");
+  strcat(auto_attr, attr);
+  int res=attr_addbyname_rec(inode, auto_attr);
+  ifree(auto_attr);
+  return res;
+}
+
 static int attr_del(fileptr inode, fileptr attrid) {
+  profile_init_start();
   DEBUG("attr_del(%08lx, %lu)", inode, attrid);
   char s_hash[9];
   sprintf(s_hash, "%08lX", inode);
@@ -349,6 +387,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
 
     if (searchres<0) {
       DEBUG("Error searching limbo");
+      profile_stop();
       return searchres;
     }
 
@@ -359,6 +398,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
       char *finaldest = gen_repos_path(s_hash, 1);
       if (!finaldest) {
         PMSG(LOG_ERR, "IO error: Failed to generate repository path");
+        profile_stop();
         return -EIO;
       }
 
@@ -368,10 +408,12 @@ static int attr_del(fileptr inode, fileptr attrid) {
         if (errno==ENOENT) {
           PMSG(LOG_ERR, "The repository symlink has vanished!");
           ifree(finaldest);
+          profile_stop();
           return -EIO;
         } else {
           PMSG(LOG_ERR, "Error while stat()ing %s: %s", finaldest, strerror(errno));
           ifree(finaldest);
+          profile_stop();
           return -EIO;
         }
       }
@@ -382,6 +424,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
       if ((errno=inode_remove(0, inode))) {
         PMSG(LOG_ERR, "IO error: Failed to remove inode from tree: %s", strerror(errno));
         ifree(finaldest);
+        profile_stop();
         return -EIO;
       }
 
@@ -390,6 +433,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
       if (unlink(finaldest)==-1) {
         PMSG(LOG_ERR, "IO error: Symlink removal failed: %s", strerror(errno));
         ifree(finaldest);
+        profile_stop();
         return -EIO;
       }
 
@@ -397,6 +441,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
     } else {
 
       DEBUG("Not in limbo");
+      profile_stop();
       return -ENOENT;
     }
 
@@ -407,6 +452,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
     if (res) {
       DEBUG("Inode removal failed: %s", strerror(res));
       if (res==ENOENT) res=EPERM;
+      profile_stop();
       return -res;
     }
     DEBUG("Removed.");
@@ -422,6 +468,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
 
       if (tree_read(piblock, (tblock*)&iblock)) {
         PMSG(LOG_ERR, "IO error reading inode data block");
+        profile_stop();
         return -EIO;
       }
 
@@ -436,6 +483,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
       if (i>=iblock.refcount) {
         /* not found */
         DEBUG("Could not find ref!");
+        profile_stop();
         return -ENOENT;
       }
 
@@ -450,6 +498,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
       if (iblock.refcount) {
         if (tree_write(piblock, (tblock*)&iblock)) {
           PMSG(LOG_ERR, "IO error writing inode data block");
+          profile_stop();
           return -EIO;
         }
 
@@ -459,12 +508,14 @@ static int attr_del(fileptr inode, fileptr attrid) {
         DEBUG("Removing entry from inode tree");
         if ((errno=tree_sub_remove(tree_get_iroot(), s_hash))) {
           PMSG(LOG_ERR, "Tree removal failed with error: %s", strerror(-res));
+          profile_stop();
           return -EIO;
         }
         /* insert inode into limbo list */
         DEBUG("Inserting inode into limbo");
         if ((errno=inode_insert(0, inode))) {
           PMSG(LOG_ERR, "IO error: Failed to insert inode into limbo: %s", strerror(errno));
+          profile_stop();
           return -EIO;
         }
       }
@@ -472,10 +523,12 @@ static int attr_del(fileptr inode, fileptr attrid) {
   }
 
   DEBUG("All done.");
+  profile_stop();
   return 0;
 }
 
 static int attr_delbyname(fileptr inode, const char *attr) {
+  profile_init_start();
   if (!attr || !*attr) {
     return -EINVAL;
   }
@@ -483,11 +536,23 @@ static int attr_delbyname(fileptr inode, const char *attr) {
   if (!attrid) {
     return -ENODATA;
   }
+  profile_stop();
   return attr_del(inode, attrid);
+}
+
+static int auto_attr_delbyname(fileptr inode, const char *attr) {
+  /* make attribute an "automatic" one */
+  char *auto_attr=calloc(strlen(attr)+2, sizeof(char));
+  strcat(auto_attr, "_");
+  strcat(auto_attr, attr);
+  int res=attr_delbyname(inode, auto_attr);
+  ifree(auto_attr);
+  return res;
 }
 
 
 static int insight_getattr(const char *path, struct stat *stbuf) {
+  profile_init_start();
   DEBUG("Getattr called on path \"%s\"", path);
 
   DEBUG("Generating query tree");
@@ -499,6 +564,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
     } else {
       DEBUG("Error in generating query tree: %s", strerror(errno));
     }
+    profile_stopf("path: %s", path);
     return -errno;
   }
 
@@ -515,6 +581,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
     memcpy(stbuf, &fstat, sizeof(struct stat));
     qtree_free(&q, 1);
     ifree(canon_path);
+    profile_stopf("path: %s", path);
     return 0;
 
   } else if (validate_path(canon_path)) {
@@ -534,6 +601,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
       stbuf->st_ino = 1;
       qtree_free(&q, 1);
       ifree(canon_path);
+      profile_stopf("path: %s", path);
       return 0;
     }
 
@@ -547,6 +615,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
         PMSG(LOG_ERR, "Failed to allocate temporary space for hash path");
         ifree(canon_path);
         qtree_free(&q, 1);
+        profile_stopf("path: %s", path);
         return -ENOMEM;
       }
       strcpy(tmpp, canon_path);
@@ -569,6 +638,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
         DEBUG("Tag \"%s\" not found\n", canon_path+1);
         qtree_free(&q, 1);
         ifree(canon_path);
+        profile_stopf("path: %s", path);
         return -ENOENT;
       }
       DEBUG("Found tag \"%s\"", canon_path+1);
@@ -576,6 +646,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
         PMSG(LOG_ERR, "IO error reading data block");
         qtree_free(&q, 1);
         ifree(canon_path);
+        profile_stopf("path: %s", path);
         return -EIO;
       }
 
@@ -601,15 +672,18 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
     ifree(last);
     qtree_free(&q, 1);
     ifree(canon_path);
+    profile_stopf("path: %s", path);
     return -ENOENT;
   }
   DEBUG("Returning\n");
   qtree_free(&q, 1);
   ifree(canon_path);
+  profile_stopf("path: %s", path);
   return 0;
 }
 
 static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+  profile_init_start();
   (void) offset;
   (void) fi;
   tnode node;
@@ -621,6 +695,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
   if (!validate_path(canon_path)) {
     DEBUG("Path does not exist\n");
     ifree(canon_path);
+    profile_stopf("path: %s", path);
     return -ENOENT;
   }
 
@@ -640,6 +715,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     qtree_free(&q, 1);
     ifree(last_tag);
     ifree(canon_path);
+    profile_stopf("path: %s", path);
     return -ENOENT;
   }
   DEBUG("Found tag \"%s\"; tree root now %lu", last_tag, tree_root);
@@ -650,6 +726,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     qtree_free(&q, 1);
     ifree(last_tag);
     ifree(canon_path);
+    profile_stopf("path: %s", path);
     return -EIO;
   }
   if (!buf) {
@@ -657,6 +734,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     qtree_free(&q, 1);
     ifree(last_tag);
     ifree(canon_path);
+    profile_stopf("path: %s", path);
     return -EIO;
   }
   DEBUG("Calling filler on dot");
@@ -677,6 +755,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
       qtree_free(&q, 1);
       ifree(last_tag);
       ifree(canon_path);
+      profile_stopf("path: %s", path);
       return -EIO;
     }
     DEBUG("%d inodes to consider", inodecount);
@@ -705,6 +784,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     PMSG(LOG_ERR, "IO error: tree_sub_get_min() failed\n");
     ifree(last_tag);
     ifree(canon_path);
+    profile_stopf("path: %s", path);
     return -EIO;
   }
 
@@ -715,6 +795,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
       PMSG(LOG_ERR, "Something went very, very wrong\n");
     ifree(last_tag);
     ifree(canon_path);
+    profile_stopf("path: %s", path);
     return 0;
   }
 
@@ -737,6 +818,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
       ifree(lastbit);
       ifree(last_tag);
       ifree(canon_path);
+      profile_stopf("path: %s", path);
       return -EIO;
     }
 
@@ -750,6 +832,14 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
   }
 
   /* TODO: change to use tree_map_keys() */
+  /* TODO: new algorithm:
+   *         - for each path component (each item in bits):
+   *           - add (with all ancestors) to PATHS set
+   *         - for each element in PATHS:
+   *           - union set of all (fully-qualified) siblings with TAGS set
+   *           - go up to parent tag, repeat
+   *         - result = TAGS - PATHS
+   */
 
   int count, k, isunique=1;
   char **bits = strsplit(canon_path, '/', &count);
@@ -783,6 +873,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
       PMSG(LOG_ERR, "I/O error reading block\n");
       ifree(last_tag);
       ifree(canon_path);
+      profile_stopf("path: %s", path);
       return -EIO;
     }
   } while (node.ptrs[0]);
@@ -797,6 +888,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
 
   DEBUG("Done\n");
 
+  profile_stopf("path: %s", path);
   return 0;
 }
 
@@ -1198,7 +1290,11 @@ static int insight_symlink(const char *from, const char *to) {
     return -EIO;
   }
 
-  DEBUG("Automatic attribute assignments...");
+  DEBUG("Calling plugins for attribute assignments...");
+  /* TODO: check result - not that there's much we can do */
+  plugin_process_import(from, to+1);
+
+  /*
   char attr[255];
 
   DEBUG("  Statting...");
@@ -1243,10 +1339,11 @@ static int insight_symlink(const char *from, const char *to) {
     attr_addbyname_rec(hash, attr);
   }
 
-  DEBUG("Done.");
-
   ifree(basename);
   ifree(ext);
+  */
+
+  DEBUG("Done.");
 
   return 0;
 }
@@ -1494,6 +1591,7 @@ static int insight_utime(const char *path, struct utimbuf *buf) {
 #endif
 
 static int insight_open(const char *path, struct fuse_file_info *fi) {
+  profile_init_start();
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Open on path \"%s\"", canon_path);
@@ -1512,6 +1610,7 @@ static int insight_open(const char *path, struct fuse_file_info *fi) {
       ifree(last);
       ifree(fullname);
       ifree(canon_path);
+      profile_stop();
       return -errno;
     } else {
       DEBUG("Open succeeded; closing file");
@@ -1522,22 +1621,26 @@ static int insight_open(const char *path, struct fuse_file_info *fi) {
       ifree(fullname);
       ifree(canon_path);
       DEBUG("Done");
+      profile_stop();
       return 0;
     }
   } else if (validate_path(canon_path)) {
     PMSG(LOG_ERR, "Cannot open directories like files!");
     ifree(last);
     ifree(canon_path);
+    profile_stop();
     return -EISDIR;
   } else {
     DEBUG("Could not find path");
     ifree(last);
     ifree(canon_path);
+    profile_stop();
     return -ENOENT;
   }
 }
 
 static int insight_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+  profile_init_start();
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Read on path \"%s\"", canon_path);
@@ -1555,6 +1658,7 @@ static int insight_read(const char *path, char *buf, size_t size, off_t offset, 
       ifree(fullname);
       ifree(last);
       ifree(canon_path);
+      profile_stop();
       return -errno;
     } else {
       int res, tmp_errno=0;
@@ -1564,22 +1668,26 @@ static int insight_read(const char *path, char *buf, size_t size, off_t offset, 
       ifree(fullname);
       ifree(last);
       ifree(canon_path);
+      profile_stop();
       return (res==-1)?-tmp_errno:res;
     }
   } else if (validate_path(canon_path)) {
     PMSG(LOG_ERR, "Cannot read directories like files!");
     ifree(last);
     ifree(canon_path);
+    profile_stop();
     return -EISDIR;
   } else {
     DEBUG("Could not find path");
     ifree(last);
     ifree(canon_path);
+    profile_stop();
     return -ENOENT;
   }
 }
 
 static int insight_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+  profile_init_start();
   char *canon_path = get_canonical_path(path);
 
   DEBUG("Write on path \"%s\"", canon_path);
@@ -1597,6 +1705,7 @@ static int insight_write(const char *path, const char *buf, size_t size, off_t o
       ifree(fullname);
       ifree(last);
       ifree(canon_path);
+      profile_stop();
       return -errno;
     } else {
       int res, tmp_errno=0;
@@ -1606,17 +1715,20 @@ static int insight_write(const char *path, const char *buf, size_t size, off_t o
       ifree(fullname);
       ifree(last);
       ifree(canon_path);
+      profile_stop();
       return (res==-1)?-tmp_errno:res;
     }
   } else if (validate_path(canon_path)) {
     PMSG(LOG_ERR, "Cannot write to directories like files!");
     ifree(last);
     ifree(canon_path);
+    profile_stop();
     return -EISDIR;
   } else {
     DEBUG("Could not find path");
     ifree(last);
     ifree(canon_path);
+    profile_stop();
     return -ENOENT;
   }
 }
@@ -1743,7 +1855,7 @@ static int insight_getxattr(const char *path, const char *name, char *value, siz
     DEBUG("Get attribute of real file: %s", fullname);
     int res = getxattr(fullname, name, value, size);
     if (res==-1) {
-      if (errno != ENODATA && errno != ENOTSUP) {
+      if (errno != ENODATA && errno != ENOTSUP && errno != ERANGE) {
         /* perfectly normal */
         PMSG(LOG_ERR, "getxattr(\"%s\", \"%s\", ...) failed: %s\n", fullname, name, strerror(errno));
       }
@@ -1783,7 +1895,7 @@ static int insight_listxattr(const char *path, char *list, size_t size) {
     DEBUG("List attributes of real file: %s", fullname);
     int res = listxattr(fullname, list, size);
     if (res==-1) {
-      if (errno != ENOTSUP) {
+      if (errno != ENOTSUP && errno != ERANGE) {
         PMSG(LOG_ERR, "listxattr(\"%s\", ...) failed: %s\n", fullname, strerror(errno));
       }
       ifree(fullname);
@@ -1879,9 +1991,11 @@ static void *insight_init(void) {
  */
 void insight_destroy(void *arg) {
   (void) arg;
+  profile_init_start();
 	PMSG(LOG_ERR, "Cleaning up and exiting");
   tree_close();
 	FMSG(LOG_ERR, "Tree store closed");
+  profile_stop();
 }
 
 
@@ -1918,47 +2032,54 @@ void usage(char *progname) {
 }
 
 static int insight_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs) {
-    (void) data;
+  (void) data;
+  profile_init_start();
 
-    switch (key) {
+  switch (key) {
     case FUSE_OPT_KEY_NONOPT:
       if (!insight.mountpoint) {
         insight.mountpoint = strdup(arg);
+        profile_stop();
         return 1;
       }
+      profile_stop();
       return 0;
 
-      case KEY_HELP:
-          usage(outargs->argv[0]);
-          fuse_opt_add_arg(outargs, "-ho");
+    case KEY_HELP:
+      usage(outargs->argv[0]);
+      fuse_opt_add_arg(outargs, "-ho");
 #if FUSE_VERSION <= 25
-          fuse_main(outargs->argc, outargs->argv, &insight_oper);
-#else
-          fuse_main(outargs->argc, outargs->argv, &insight_oper, NULL);
-#endif
-          exit(1);
-
-      case KEY_VERSION:
-          fprintf(stderr, "Insight semantic filesystem for Linux %s (unstable)\n", VERSION);
-#if FUSE_VERSION >= 25
-          fuse_opt_add_arg(outargs, "--version");
-#endif
-#if FUSE_VERSION == 25
-          fuse_main(outargs->argc, outargs->argv, &insight_oper);
+      fuse_main(outargs->argc, outargs->argv, &insight_oper);
 #else
       fuse_main(outargs->argc, outargs->argv, &insight_oper, NULL);
 #endif
-          exit(0);
+      profile_stop();
+      exit(1);
 
-      default:
-          fprintf(stderr, "Extra parameter provided\n");
-          usage(outargs->argv[0]);
-    }
+    case KEY_VERSION:
+      fprintf(stderr, "Insight semantic filesystem for Linux %s (unstable)\n", VERSION);
+#if FUSE_VERSION >= 25
+      fuse_opt_add_arg(outargs, "--version");
+#endif
+#if FUSE_VERSION == 25
+      fuse_main(outargs->argc, outargs->argv, &insight_oper);
+#else
+      fuse_main(outargs->argc, outargs->argv, &insight_oper, NULL);
+#endif
+      profile_stop();
+      exit(0);
 
+    default:
+      fprintf(stderr, "Extra parameter provided\n");
+      usage(outargs->argv[0]);
+  }
+
+  profile_stop();
   return 0;
 }
 
 static void insight_process_args(struct fuse_args *args) {
+  profile_init_start();
   fuse_opt_add_arg(args, "-ofsname=insight");       /* filesystem name */
   fuse_opt_add_arg(args, "-ouse_ino");              /* honour the inode fields in getattr() */
   fuse_opt_add_arg(args, "-oreaddir_ino");          /* honour the inode fields in readdir() */
@@ -1995,9 +2116,11 @@ static void insight_process_args(struct fuse_args *args) {
       fprintf(stderr, "%s: Will log verbosely\n", insight.progname);
     fuse_opt_add_arg(args, "-d");
   }
+  profile_stop();
 }
 
 static int insight_open_store() {
+  profile_init_start();
   /* check store file given */
   if (!insight.treestore || (strcmp(insight.treestore, "") == 0)) {
     if (strlen(getenv("HOME"))) {
@@ -2022,11 +2145,13 @@ static int insight_open_store() {
           if (!insight.quiet)
             FMSG(LOG_ERR, "Default Insight directory %s does not exist and can't be created!\n\n", insightdir);
           ifree(insightdir);
+          profile_stop();
           return 2;
         }
       } else if (!S_ISDIR(dst.st_mode)) {
         FMSG(LOG_ERR, "Default Insight directory %s exists but must be a directory!\n\n", insightdir);
         ifree(insightdir);
+        profile_stop();
         return 2;
       }
       ifree(insightdir);
@@ -2034,6 +2159,7 @@ static int insight_open_store() {
       usage(insight.progname);
       if (!insight.quiet)
         MSG(LOG_ERR, "%s: No tree store filename given\n", insight.progname);
+      profile_stop();
       return 2;
     }
   }
@@ -2077,13 +2203,16 @@ static int insight_open_store() {
   /* open the store */
   if (tree_open(insight.treestore)) {
     PMSG(LOG_ERR, "Failed to initialise tree!");
+    profile_stop();
     return 2;
   }
 
+  profile_stop();
   return 0;
 }
 
 static int insight_check_repos() {
+  profile_init_start();
   /* check repository path we've been given */
   if (!insight.repository || (strcmp(insight.repository, "") == 0)) {
     if (strlen(getenv("HOME"))) {
@@ -2108,11 +2237,13 @@ static int insight_check_repos() {
           if (!insight.quiet)
             FMSG(LOG_ERR, "Default Insight directory %s does not exist and can't be created!\n\n", insightdir);
           ifree(insightdir);
+          profile_stop();
           return 2;
         }
       } else if (!S_ISDIR(dst.st_mode)) {
         FMSG(LOG_ERR, "Default Insight directory %s exists but must be a directory!\n\n", insightdir);
         ifree(insightdir);
+        profile_stop();
         return 2;
       }
 
@@ -2121,6 +2252,7 @@ static int insight_check_repos() {
       usage(insight.progname);
       if (!insight.quiet)
         MSG(LOG_ERR, "%s: No link repository directory given\n", insight.progname);
+      profile_stop();
       return 2;
     }
   }
@@ -2168,13 +2300,16 @@ static int insight_check_repos() {
     if (mkdir(insight.repository, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {
       if (!insight.quiet)
         FMSG(LOG_ERR, "Link repository directory %s does not exist and can't be created!\n\n", insight.repository);
+      profile_stop();
       return 2;
     }
   } else if (!S_ISDIR(dst.st_mode)) {
     FMSG(LOG_ERR, "Link repository directory %s exists but must be a directory!\n\n", insight.repository);
+    profile_stop();
     return 2;
   }
 
+  profile_stop();
   return 0;
 }
 
@@ -2237,6 +2372,35 @@ int main(int argc, char *argv[]) {
     exit(2);
   }
 
+  /* plugin function setup */
+  insight.funcs.add_tag = attr_addbyname_rec;
+  insight.funcs.add_auto_tag = auto_attr_addbyname_rec;
+  insight.funcs.del_tag = attr_delbyname;
+  insight.funcs.del_auto_tag = auto_attr_delbyname;
+  insight.funcs.get_inode = get_inode;
+  insight.funcs.log = insight_log;
+
+  /* load plugins */
+  char *plugin_dir = NULL;
+  if (getenv("INSIGHT_PLUGINS")) {
+    plugin_dir = getenv("INSIGHT_PLUGINS");
+    if (!insight.quiet)
+      MSG(LOG_INFO, "plugin_setup: User-defined plugin directory: %s", plugin_dir);
+  } else {
+    plugin_dir = INSIGHT_DEFAULT_PLUGIN_DIR;
+    if (!insight.quiet)
+      MSG(LOG_INFO, "plugin_setup: Default plugin directory: %s", plugin_dir);
+  }
+
+	struct stat st;
+	if (lstat(plugin_dir, &st) == -1) {
+    MSG(LOG_WARNING, "plugin_setup: Error opening plugin directory %s: %s", plugin_dir, strerror(errno));
+	} else if (!S_ISDIR(st.st_mode)) {
+    MSG(LOG_WARNING, "plugin_setup: Error opening plugin directory %s: not a directory", plugin_dir);
+	} else {
+    plugin_load_all(plugin_dir);
+  }
+
   /*
   FMSG(LOG_DEBUG, "Fuse options:");
   int fargc = args.argc;
@@ -2254,9 +2418,25 @@ int main(int argc, char *argv[]) {
 
   fuse_opt_free_args(&args);
 
+  /* unload plugins */
+  plugin_unload_all();
+
   ifree(insight.mountpoint);
   ifree(insight.treestore);
   ifree(insight.repository);
 
   return res;
+}
+
+void insight_log(int lvl, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+#ifdef _MSG_STDERR
+  vfprintf((lvl<=LOG_WARNING)?stderr:stdout, fmt, ap);
+  fprintf((lvl<=LOG_WARNING)?stderr:stdout, "\n");
+#else
+  vsyslog(lvl, fmt, ap);
+  syslog(lvl, "\n");
+#endif
+  va_end(ap);
 }

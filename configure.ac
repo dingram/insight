@@ -8,8 +8,11 @@ AC_CONFIG_SRCDIR(src/insight.c)
 
 # check for programs
 AC_PROG_CC
+AC_PROG_LIBTOOL
 
 # check for libraries
+AC_SEARCH_LIBS(dlsym, [dl])
+
 # check for headers
 AC_HEADER_STDC
 AC_HEADER_DIRENT
@@ -55,6 +58,28 @@ AC_MSG_RESULT($debugmode)
 if test x"$debugmode" = x"yes"; then
   AC_SUBST([CFLAGS],["-D_DEBUG ${CFLAGS}"])
 fi
+
+
+## option: plugin directory
+#AC_MSG_CHECKING(for plugin directory)
+#
+#insightplugindir=`eval echo "${libdir}/insight"`
+#AC_ARG_WITH(plugin-dir,
+#              AC_HELP_STRING(
+#                             [--with-plugin-dir=DIR],
+#                             [Specify location of Insight plugins (@<:@default=LIBDIR/insight@:>@)]
+#                            ),
+#              insightplugindir="$withval"
+#             )
+#
+#AC_MSG_RESULT($insightplugindir)
+#
+#if ! test -z "$insightplugindir"; then
+#  AC_SUBST([INSIGHT_PLUGIN_DIR],[$insightplugindir])
+#  AC_DEFINE([INSIGHT_DEFAULT_PLUGIN_DIR],INSIGHT_PLUGIN_DIR,[Plugin directory])
+#fi
+
+
 
 # verify FUSE is installed
 AC_CHECK_LIB([fuse],[fuse_main],,[

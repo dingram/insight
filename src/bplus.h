@@ -48,8 +48,11 @@
 /** Initialise a inode data block (zero it and set its magic number) */
 #define initInodeDataBlock(n) do { bzero((n),sizeof(tidata)); (n)->magic=MAGIC_INODEDATA; } while (0)
 
+#ifndef _TYPE_FILEPTR
+#define _TYPE_FILEPTR
 /** An address within a file */
 typedef unsigned long fileptr;
+#endif
 
 /** A key within the tree */
 typedef char tkey[TREEKEY_SIZE];

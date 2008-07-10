@@ -207,6 +207,7 @@ int set_diff(void *set1, void *set2, void *out, size_t in1count, size_t in2count
     return -EINVAL;
   }
 
+  /* TODO: this is wrong. Empty set1 returns 0; empty set2 returns set1 */
   if (!in1count || !in2count) {
     DEBUG("No elements in an input array means no difference possible");
     return 0;
@@ -226,6 +227,57 @@ int set_diff(void *set1, void *set2, void *out, size_t in1count, size_t in2count
     }
     if (!eq) {
       memcpy((out + oi++ * elem_size), (set1 + s1 * elem_size), elem_size);
+    }
+  }
+
+  return oi;
+}
+
+/**
+ * Ensures that a set is ordered and contains no duplicate items.
+ *
+ * @param set       The set to be used.
+ * @param out       The output set.
+ * @param in_count  The number of items in \a set.
+ * @param outmax    The maximum number of items in \a out.
+ * @param elem_size The size of an element in the set arrays.
+ * @param cmp       A comparison function that can be used on the array
+ * elements.
+ * @returns A negative error code, or the number of items written to the output
+ * array.
+ * @todo This can be made much more efficient.
+ */
+int set_uniq(void *set, void *out, size_t in_count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*)) {
+  if (!set || !out || !outmax || !elem_size || !cmp) {
+    DEBUG("At least one argument was null or zero");
+    return -EINVAL;
+  }
+
+  if (!in_count) {
+    DEBUG("No elements in input array means it's trivially unique");
+    return 0;
+  }
+
+  void *tmp = malloc(in_count*elem_size);
+  if (!tmp) {
+    PMSG(LOG_ERR, "Failed to allocate memory for temporary array");
+    return -ENOMEM;
+  }
+  DEBUG("Copying to temporary array");
+  memcpy(tmp, set, in_count*elem_size);
+
+  DEBUG("Sorting temporary array");
+  qsort(tmp, in_count, elem_size, cmp);
+
+  size_t s1=0, oi=0;
+  void *last=NULL;
+  memcpy((out + oi++ * elem_size), (tmp + s1 * elem_size), elem_size);
+  last = (tmp + s1 * elem_size);
+  /* copy only unique values */
+  for (s1=1; s1<in_count; s1++) {
+    if (cmp((tmp + s1 * elem_size), last)!=0) {
+      memcpy((out + oi++ * elem_size), (tmp + s1 * elem_size), elem_size);
+      last = (tmp + s1 * elem_size);
     }
   }
 
