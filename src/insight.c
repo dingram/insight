@@ -38,7 +38,6 @@
 #include <string_helpers.h>
 #include <query_engine.h>
 #include <set_ops.h>
-#include <stdarg.h>
 
 static int   insight_getattr(const char *path, struct stat *stbuf);
 static int   insight_readlink(const char *path, char *buf, size_t size);
@@ -2426,17 +2425,4 @@ int main(int argc, char *argv[]) {
   ifree(insight.repository);
 
   return res;
-}
-
-void insight_log(int lvl, const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-#ifdef _MSG_STDERR
-  vfprintf((lvl<=LOG_WARNING)?stderr:stdout, fmt, ap);
-  fprintf((lvl<=LOG_WARNING)?stderr:stdout, "\n");
-#else
-  vsyslog(lvl, fmt, ap);
-  syslog(lvl, "\n");
-#endif
-  va_end(ap);
 }

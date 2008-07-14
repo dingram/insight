@@ -1,23 +1,8 @@
 #ifndef _DEBUG_H
 #define _DEBUG_H
 
-/** @cond */
-#if !defined(_MSG_SYSLOG) && !defined(_MSG_STDERR)
-#define _MSG_STDERR
-#endif
-
-/* need the LOG_* constants */
-#include <syslog.h>
-
-#ifdef _MSG_STDERR
-#include <stdio.h>
-//#define MSG(l, f, ...)  fprintf((l<=LOG_WARNING)?stderr:stdout, f "\n",## __VA_ARGS__)
-#define INIT_LOG()
-#else
-//#define MSG(l, f, ...)  do { if (!insight.quiet) syslog(l, "%s: " f "\n", __FUNCTION__,## __VA_ARGS__) } while (0)
-#define INIT_LOG()      do { openlog("insight", LOG_PID, LOG_DAEMON); } while(0)
-#endif
-#define MSG(l, f, ...)  insight_log(l, f,## __VA_ARGS__)
+/* include logger function */
+#include <insight_log.h>
 
 #define FMSG(l, f, ...) MSG(l, "%s: " f, __FUNCTION__,## __VA_ARGS__)
 #define LMSG(l, f, ...) MSG(l, "%s:%d: " f, __FILE__, __LINE__,## __VA_ARGS__)

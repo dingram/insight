@@ -8,6 +8,8 @@ insight_SOURCES=insight.c \
                 set_ops.c \
                 path_helpers.h \
                 path_helpers.c \
+                insight_log.h \
+                insight_log.c \
                 plugin_handler.h \
                 plugin_handler.c \
                 debug.h \
