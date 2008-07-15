@@ -35,6 +35,7 @@
 #include <debug.h>
 #include <string_helpers.h>
 #include <path_helpers.h>
+#include <set_ops.h>
 
 /**
  * Create canonical path from the argument. A canonical path contains no
@@ -354,4 +355,184 @@ char *fullname_from_inode(const fileptr inode) {
   ifree(filepath);
 
   return linkres;
+}
+
+
+static int _sibcallback(const char *key, const fileptr val, void *data) {
+  (void) val;
+  struct {
+    char **sibs;
+    char *prefix;
+    int cur;
+    int sibcount;
+  } *thing = data;
+  if (thing->cur >= thing->sibcount) {
+    PMSG(LOG_ERR, "SERIOUS ERROR");
+    return -1;
+  }
+  if (thing->prefix && *(thing->prefix)) {
+    thing->sibs[thing->cur] = calloc(strlen(thing->prefix)+strlen(key)+1, sizeof(char));
+    strcpy(thing->sibs[thing->cur], thing->prefix);
+    strcat(thing->sibs[thing->cur], key);
+  } else {
+    thing->sibs[thing->cur] = strdup(key);
+  }
+  thing->cur++;
+  return 0;
+}
+
+char **path_get_dirs(const char *path, unsigned int *count) {
+  unsigned int i;
+  DEBUG("\033[1;33mGetting directories for path: %s\033[m", path);
+
+  /* TODO: deal with ":" directories! */
+  /*       Basically:
+   *        - build list of all directories in path
+   *        - remove any that don't have the same prefix as the : item
+   *        - remove the common prefix and add to array REM
+   *        - get set of all subkeys of : item and add to array SET
+   *        - do difference (SET-REM) and there's the answer
+   */
+
+  unsigned int alloc_count=0, pathcount=0;
+  // count amount of space we'll need in PATHS set
+  alloc_count+=strcount(path, INSIGHT_SUBKEY_SEP_C);
+  alloc_count+=strcount(path, '/');
+  DEBUG("Path set count: %u", alloc_count);
+
+  if (strcmp(path, "/")==0) {
+    DEBUG("Children of root");
+    *count = tree_sub_key_count(0);
+    DEBUG("%d children of root\n", *count);
+
+    char **sibset=calloc(*count+1, sizeof(char*));
+    struct {
+      char **sibs;
+      char *prefix;
+      int cur;
+      int sibcount;
+    } thing;
+    thing.sibs = sibset;
+    thing.cur=0;
+    thing.sibcount=*count;
+    thing.prefix=NULL;
+    tree_map_keys(0, _sibcallback, (void*)&thing);
+
+    return sibset;
+  }
+
+  int bitscount;
+  char **bits = strsplit(path, '/', &bitscount);
+
+  char **path_set=calloc(alloc_count, sizeof(char*));
+  unsigned int p=0;
+  for (i=0; i<(unsigned int)bitscount; i++) {
+    char *tmp;
+    if (!*bits[i])
+      continue;
+    DEBUG("Adding \"%s\" to path set", bits[i]);
+    path_set[p++]=strdup(bits[i]);
+    while ((tmp=rindex(bits[i], INSIGHT_SUBKEY_SEP_C))) {
+      *tmp='\0';
+      path_set[p++]=strdup(bits[i]);
+      DEBUG("Adding \"%s\" to path set", bits[i]);
+    }
+  }
+
+  DEBUG("Freeing bits");
+
+  for (bitscount--;bitscount>=0; bitscount--) {
+    ifree(bits[bitscount]);
+  }
+  ifree(bits);
+
+  qsort(path_set, alloc_count, sizeof(char*), pstrcmp);
+  pathcount = set_uniq(path_set, alloc_count, sizeof(char*), pstrcmp);
+
+  for (i=pathcount; i<alloc_count; i++) {
+    ifree(path_set[i]);
+  }
+
+
+  /*
+   * for each element in PATHS:
+   *  - union set of all (fully-qualified) siblings with TAGS set
+   */
+  alloc_count=pathcount;
+  char **outset = malloc(alloc_count*sizeof(char*));
+  char **tmpset = NULL;
+  memcpy(outset, path_set, alloc_count*sizeof(char*));
+  char *curprefix=NULL;
+  int out_count;
+  for (i=0; i<pathcount; i++) {
+    /* get parent tag */
+    fileptr tree_root;
+    char *tmp=rindex(path_set[i], INSIGHT_SUBKEY_SEP_C);
+    if (!tmp) {
+      tree_root=0;
+      curprefix=strdup("");
+    } else {
+      *tmp='\0';
+      tree_root=get_tag(path_set[i]);
+      curprefix=calloc(strlen(path_set[i])+2, sizeof(char));
+      strcat(curprefix, path_set[i]);
+      strcat(curprefix, INSIGHT_SUBKEY_SEP);
+      *tmp=INSIGHT_SUBKEY_SEP_C;
+    }
+    DEBUG("Current prefix: \"%s\"", curprefix);
+    /* get set of all siblings */
+    unsigned int sibcount = tree_sub_key_count(tree_root);
+    DEBUG("%d siblings of tag \"%s\", including itself\n", sibcount, path_set[i]);
+
+    char **sibset=calloc(sibcount+1, sizeof(char*));
+    struct {
+      char **sibs;
+      char *prefix;
+      int cur;
+      int sibcount;
+    } thing;
+    thing.sibs = sibset;
+    thing.cur=0;
+    thing.sibcount=sibcount;
+    thing.prefix=curprefix;
+    DEBUG("tree_map_keys();");
+    tree_map_keys(tree_root, _sibcallback, (void*)&thing);
+    DEBUG("tree_map_keys(); // done");
+
+    DEBUG("Realloc()ing tmpset");
+    tmpset=realloc(tmpset, alloc_count*sizeof(char*)); /* TODO: check for failure */
+    DEBUG("memcpy()");
+    memcpy(tmpset, outset, alloc_count*sizeof(char*));
+    DEBUG("Realloc()ing outset");
+    out_count = alloc_count+sibcount;
+    outset=realloc(outset, out_count*sizeof(char*));
+
+    unsigned int k;
+
+    DEBUG("Set union");
+    alloc_count = set_union(tmpset, sibset, outset, alloc_count, sibcount, out_count, sizeof(char*), pstrcmp);
+    for (k=alloc_count; k<(unsigned int)out_count; k++) {
+      DEBUG("Freeing outset[%u] %p (\"%s\")", k, outset[k], outset[k]);
+      ifree(outset[k]);
+    }
+    ifree(sibset);
+    ifree(curprefix);
+  }
+  ifree(tmpset);
+
+  DEBUG("Calling set_uniq()");
+  out_count = set_uniq(outset, alloc_count, sizeof(char*), pstrcmp);
+
+  out_count = set_diff(outset, path_set, out_count, pathcount, sizeof(char*), pstrcmp);
+  ifree(path_set);
+
+  for (i=out_count; i<alloc_count; i++) {
+    DEBUG("Freeing \"%s\" (%p)", outset[i], outset[i]);
+    ifree(outset[i]);
+  }
+
+  outset = realloc(outset, out_count * sizeof(char *));
+
+  *count = out_count;
+  return outset;
 }

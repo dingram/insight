@@ -830,6 +830,18 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     ifree(lastbit);
   }
 
+
+  DEBUG("Getting directory list");
+  unsigned int dirs_count;
+  char **dirs_list = path_get_dirs(canon_path, &dirs_count);
+  DEBUG("Directory list returned %u entries", dirs_count);
+
+  for (i=0; i<dirs_count; i++) {
+    filler(buf, dirs_list[i], NULL, 0);
+    ifree(dirs_list[i]);
+  }
+  ifree(dirs_list);
+
   /* TODO: change to use tree_map_keys() */
   /* TODO: new algorithm:
    *         - for each path component (each item in bits):
@@ -840,6 +852,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
    *         - result = TAGS - PATHS
    */
 
+  /*
   int count, k, isunique=1;
   char **bits = strsplit(canon_path, '/', &count);
 
@@ -877,13 +890,14 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     }
   } while (node.ptrs[0]);
 
-  ifree(last_tag);
-  ifree(canon_path);
-
   for (count--;count>=0; count--) {
     ifree(bits[count]);
   }
   ifree(bits);
+  */
+
+  ifree(last_tag);
+  ifree(canon_path);
 
   DEBUG("Done\n");
 

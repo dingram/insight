@@ -47,5 +47,6 @@ int have_file_by_hash(const unsigned long hash, struct stat *stat);
 int have_file_by_shash(const char *hash, struct stat *stat);
 char *basename_from_inode(const fileptr inode);
 char *fullname_from_inode(const fileptr inode);
+char **path_get_dirs(const char *path, unsigned int *count);
 
 #endif

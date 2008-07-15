@@ -2,6 +2,9 @@
 #include <insight_consts.h>
 #define _GNU_SOURCE
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <libgen.h>
 
 static insight_funcs *insight;
 
@@ -13,7 +16,9 @@ int insight_plugin_init(insight_plugin_caps *caps, insight_funcs *funcs) {
 }
 
 int insight_plugin_import(const char *realpath, const char *filename) {
-  char *basename_s = basename(realpath);
+  char *basepath = strdup(realpath);
+  char *basename_s = basename(basepath);
+  free(basepath);
   char *ext = rindex(basename_s, '.');
   char attr[255];
   memset(attr, 0, 255);
@@ -36,6 +41,9 @@ int insight_plugin_import(const char *realpath, const char *filename) {
 }
 
 int insight_plugin_rename(const char *realpath, const char *oldname, const char *newname) {
+  (void) realpath;
+  (void) oldname;
+  (void) newname;
   insight->log(LOG_INFO, "auto_group: rename()");
   return EAGAIN;
 }

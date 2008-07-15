@@ -34,7 +34,7 @@ int inodecmp(const void *p1, const void *p2);
 int pstrcmp(const void *p1, const void *p2);
 int set_union(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
 int set_intersect(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
-int set_diff(void *set1, void *set2, void *out, size_t in1count, size_t in2count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
-int set_uniq(void *set, void *out, size_t in_count, size_t outmax, size_t elem_size, int (*cmp)(const void*, const void*));
+int set_diff(void *set1, const void const * const set2, size_t in1count, size_t in2count, size_t elem_size, int (*cmp)(const void*, const void*));
+int set_uniq(void *set, size_t count, size_t elem_size, int (*cmp)(const void*, const void*));
 
 #endif
