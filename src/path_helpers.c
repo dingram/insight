@@ -65,7 +65,7 @@ char *get_canonical_path(const char *path) {
   int slashcount;
   char **bits = strsplit((char*)(path+1), '/', &slashcount);
 
-  char *tmp=calloc(strlen(path), sizeof(char));
+  char *tmp=calloc(strlen(path)+1, sizeof(char));
 
   int i, prevsub=0;
   for (i=0; i<slashcount; i++) {
@@ -306,7 +306,7 @@ int have_file_by_hash(const unsigned long hash, struct stat *fstat) {
 }
 
 int have_file_by_name(const char *path, struct stat *fstat) {
-  return have_file_by_hash(hash_path(path, strlen(path)), fstat);
+  return have_file_by_hash(hash_path(path), fstat);
 }
 
 char *basename_from_inode(const fileptr inode) {
@@ -381,18 +381,104 @@ static int _sibcallback(const char *key, const fileptr val, void *data) {
   return 0;
 }
 
+char **path_get_subkeys(const char *path, unsigned int *count) {
+/* Basically:
+ *  - build list of all directories in path
+ *  - remove any that don't have the same prefix as the : item
+ *  - remove the common prefix and add to array REM
+ *  - get set of all subkeys of : item and add to array SET
+ *  - do difference (SET-REM) and there's the answer
+ */
+  char *prefix = rindex(path, '/');
+  if (!prefix) {
+    prefix = strdup(path);
+  } else {
+    prefix = strdup(prefix+1);
+  }
+  unsigned int prefixlen = strlen(prefix);
+  /* convert trailing INSIGHT_SUBKEY_IND_C */
+  if (prefix[prefixlen-1]==INSIGHT_SUBKEY_IND_C)
+    prefix[prefixlen-1]=INSIGHT_SUBKEY_SEP_C;
+  else {
+    DEBUG("Not a subkey path");
+    ifree(prefix);
+    return NULL;
+  }
+
+  DEBUG("Prefix: %s", prefix);
+
+  unsigned int alloc_count=0, pathcount=0;
+  alloc_count+=strcount(path, '/');
+
+  int bitscount;
+  char **bits = strsplit(path, '/', &bitscount);
+
+  char **path_set=calloc(alloc_count, sizeof(char*));
+  unsigned int i=0, p=0;
+  for (i=0; i<(unsigned int)bitscount; i++) {
+    if (!*bits[i])
+      continue;
+    if (strncmp(bits[i], prefix, prefixlen)!=0)
+      continue;
+    DEBUG("Adding \"%s\" to path set", bits[i]+prefixlen);
+    path_set[p++]=strdup(bits[i]+prefixlen);
+  }
+
+  DEBUG("Freeing bits");
+
+  for (bitscount--;bitscount>=0; bitscount--) {
+    ifree(bits[bitscount]);
+  }
+  ifree(bits);
+
+  qsort(path_set, p, sizeof(char*), pstrcmp);
+  pathcount = set_uniq(path_set, p, sizeof(char*), pstrcmp);
+
+  for (i=pathcount; i<p; i++) {
+    ifree(path_set[i]);
+  }
+
+  prefix[prefixlen-1]='\0';
+  DEBUG("Children of %s", prefix);
+  fileptr tree_root = get_tag(prefix);
+  prefix[prefixlen-1]=INSIGHT_SUBKEY_SEP_C;
+  unsigned int sibcount = tree_sub_key_count(tree_root);
+  DEBUG("%d children", sibcount);
+
+  char **sibset=calloc(sibcount+1, sizeof(char*));
+  struct {
+    char **sibs;
+    char *prefix;
+    int cur;
+    int sibcount;
+  } thing;
+  thing.sibs = sibset;
+  thing.cur=0;
+  thing.sibcount=sibcount;
+  thing.prefix=NULL;
+  tree_map_keys(tree_root, _sibcallback, (void*)&thing);
+
+  *count=set_diff(sibset, path_set, sibcount, pathcount, sizeof(char*), pstrcmp);
+  for (i=*count; i<sibcount; i++) {
+    ifree(sibset[i]);
+  }
+
+  for (i=0; i<pathcount; i++) {
+    ifree(path_set[i]);
+  }
+  ifree(path_set);
+  ifree(prefix);
+  return sibset;
+}
+
 char **path_get_dirs(const char *path, unsigned int *count) {
   unsigned int i;
-  DEBUG("\033[1;33mGetting directories for path: %s\033[m", path);
 
-  /* TODO: deal with ":" directories! */
-  /*       Basically:
-   *        - build list of all directories in path
-   *        - remove any that don't have the same prefix as the : item
-   *        - remove the common prefix and add to array REM
-   *        - get set of all subkeys of : item and add to array SET
-   *        - do difference (SET-REM) and there's the answer
-   */
+  if (last_char_in(path)==INSIGHT_SUBKEY_IND_C) {
+    return path_get_subkeys(path, count);
+  }
+
+  DEBUG("\033[1;33mGetting directories for path: %s\033[m", path);
 
   unsigned int alloc_count=0, pathcount=0;
   // count amount of space we'll need in PATHS set
@@ -403,7 +489,7 @@ char **path_get_dirs(const char *path, unsigned int *count) {
   if (strcmp(path, "/")==0) {
     DEBUG("Children of root");
     *count = tree_sub_key_count(0);
-    DEBUG("%d children of root\n", *count);
+    DEBUG("%d children of root", *count);
 
     char **sibset=calloc(*count+1, sizeof(char*));
     struct {
@@ -480,9 +566,10 @@ char **path_get_dirs(const char *path, unsigned int *count) {
       *tmp=INSIGHT_SUBKEY_SEP_C;
     }
     DEBUG("Current prefix: \"%s\"", curprefix);
+
     /* get set of all siblings */
     unsigned int sibcount = tree_sub_key_count(tree_root);
-    DEBUG("%d siblings of tag \"%s\", including itself\n", sibcount, path_set[i]);
+    DEBUG("%d siblings of tag \"%s\", including itself", sibcount, path_set[i]);
 
     char **sibset=calloc(sibcount+1, sizeof(char*));
     struct {

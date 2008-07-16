@@ -67,13 +67,12 @@ int strcount(const char *haystack, const char needle) {
  * input string if \a sep is not found.
  */
 char *strlast(const char *input, const char sep) {
-  char *dup = strdup(input);
-  char *ret=rindex(dup, sep);
+  char *ret=rindex(input, sep);
   if (ret) {
     ret=strdup(ret+1);
-    ifree(dup);
+  } else {
+    ret=strdup(input);
   }
-  else ret=dup;
   return ret;
 }
 
@@ -220,7 +219,7 @@ char **strsplit(const char *input, const char sep, int *count) {
 	} while(0)
 
 
-unsigned long hash_path(const char *path, int len) {
+unsigned long hash_path(const char *path) {
 
 	unsigned long k[] = { 0x9464a485, 0x542e1a94, 0x3e846bff, 0xb75bcfc3 };
 
@@ -232,6 +231,7 @@ unsigned long hash_path(const char *path, int len) {
   /* bit of molding */
   char *p_orig = strlast(path, '/');
   char *p = p_orig + 1;
+  int len = strlen(p);
 
 	pad = (unsigned long) len | ((unsigned long) len << 8);
 	pad |= pad << 16;
@@ -301,8 +301,4 @@ unsigned long hash_path(const char *path, int len) {
   ifree(p_orig);
 
 	return h0 ^ h1;
-}
-
-unsigned long get_inode(const char *path) {
-  return hash_path(path, strlen(path));
 }

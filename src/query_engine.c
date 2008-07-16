@@ -325,7 +325,7 @@ static int _path_to_query_proc(const char *str, unsigned long data) {
   qelem *newnode=NULL;
   qelem **qroot=(qelem**)data;
   int is_tag = get_tag(str);
-  unsigned long path_hash = hash_path(str, strlen(str));
+  unsigned long path_hash = hash_path(str);
   int is_file = have_file_by_hash(path_hash, NULL);
 
   if (is_tag) {

@@ -619,7 +619,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
       }
       strcpy(tmpp, canon_path);
       strcat(tmpp, ":");
-      stbuf->st_ino = hash_path(tmpp, strlen(tmpp));
+      stbuf->st_ino = hash_path(tmpp);
       ifree(tmpp);
     } else {
       int subtag=0;
@@ -664,7 +664,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
       }
       stbuf->st_nlink = 1;
       /* provide probably unique inodes for directories */
-      stbuf->st_ino = hash_path(canon_path, strlen(canon_path));
+      stbuf->st_ino = hash_path(canon_path);
     }
   } else {
     DEBUG("Path does not exist\n");
@@ -686,7 +686,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
   (void) offset;
   (void) fi;
   tnode node;
-  int i;
+  unsigned int i;
   char *canon_path = get_canonical_path(path);
 
   DEBUG("readdir(path=\"%s\", buf=%p, offset=%lld)", canon_path, buf, offset);
@@ -759,7 +759,7 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     }
     DEBUG("%d inodes to consider", inodecount);
 
-    for (i=0; i<inodecount; i++) {
+    for (i=0; i<(unsigned int)inodecount; i++) {
       char *str = basename_from_inode(inodelist[i]);
       if (str) {
         DEBUG("Adding filename \"%s\" to listing", str);
@@ -841,60 +841,6 @@ static int insight_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     ifree(dirs_list[i]);
   }
   ifree(dirs_list);
-
-  /* TODO: change to use tree_map_keys() */
-  /* TODO: new algorithm:
-   *         - for each path component (each item in bits):
-   *           - add (with all ancestors) to PATHS set
-   *         - for each element in PATHS:
-   *           - union set of all (fully-qualified) siblings with TAGS set
-   *           - go up to parent tag, repeat
-   *         - result = TAGS - PATHS
-   */
-
-  /*
-  int count, k, isunique=1;
-  char **bits = strsplit(canon_path, '/', &count);
-
-  do {
-    for (i=0; i<node.keycount; i++) {
-      if (*last_tag) {
-        char *incomplete_test=calloc(strlen(last_tag)+strlen(node.keys[i])+2, sizeof(char));
-        strcpy(incomplete_test, last_tag);
-        strcat(incomplete_test, INSIGHT_SUBKEY_SEP);
-        strcat(incomplete_test, node.keys[i]);
-        for (k=0, isunique=1; k<count && isunique; k++) {
-          isunique &= (strcmp(node.keys[i], bits[k])!=0)?1:0;
-          isunique &= (strcmp(incomplete_test, bits[k])!=0)?1:0;
-        }
-        ifree(incomplete_test);
-      } else {
-        for (k=0, isunique=1; k<count && isunique; k++) {
-          isunique &= (strcmp(node.keys[i], bits[k])!=0)?1:0;
-        }
-      }
-
-      if (isunique) {
-        DEBUG("Adding key \"%s\" to directory listing", node.keys[i]);
-        filler(buf, node.keys[i], NULL, 0);
-      } else {
-        DEBUG("Key \"%s\" is already in path", node.keys[i]);
-      }
-    }
-    if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
-      PMSG(LOG_ERR, "I/O error reading block\n");
-      ifree(last_tag);
-      ifree(canon_path);
-      profile_stopf("path: %s", path);
-      return -EIO;
-    }
-  } while (node.ptrs[0]);
-
-  for (count--;count>=0; count--) {
-    ifree(bits[count]);
-  }
-  ifree(bits);
-  */
 
   ifree(last_tag);
   ifree(canon_path);
@@ -1116,7 +1062,7 @@ static int insight_unlink(const char *path) {
 
   /* calculate an inode number for the path */
   DEBUG("Hashing \"%s\"...", bits[count-1]);
-  hash = hash_path(bits[count-1], strlen(bits[count-1]));
+  hash = hash_path(bits[count-1]);
 
   if (count>1) {
     DEBUG("Getting block for \"%s\"", bits[count-2]);
@@ -1169,7 +1115,7 @@ static int insight_mknod(const char *path, mode_t mode, dev_t rdev) {
 
     DEBUG("Last returned \"%s\"", bits[count-1]);
 
-    unsigned long hash = hash_path(bits[count-1], strlen(bits[count-1]));
+    unsigned long hash = hash_path(bits[count-1]);
     DEBUG("Which gives us hash %08lx", hash);
 
     struct stat fstat;
@@ -1264,7 +1210,7 @@ static int insight_symlink(const char *from, const char *to) {
 
   /* calculate an inode number for the path */
   DEBUG("Hashing \"%s\"...", to+1);
-  hash = hash_path(to+1, strlen(to+1));
+  hash = hash_path(to+1);
   sprintf(s_hash, "%08lX", hash);
   DEBUG("Repos target therefore: %s -> %s", s_hash, from);
 
@@ -1383,7 +1329,7 @@ static int insight_link(const char *from, const char *to) {
   char *last_bit = strlast(canon_from, '/');
   /* calculate an inode number for the path */
   DEBUG("Hashing \"%s\"...", last_bit);
-  hash = hash_path(last_bit, strlen(last_bit));
+  hash = hash_path(last_bit);
   ifree(canon_from);
 
   int count;
@@ -1420,7 +1366,7 @@ static int insight_chmod(const char *path, mode_t mode) {
 
   struct stat fstat;
   char *last = strlast(canon_path+1, '/');
-  unsigned long hash = hash_path(last, strlen(last));
+  unsigned long hash = hash_path(last);
 
   if (have_file_by_hash(hash, &fstat)) {
     char *fullname = fullname_from_inode(hash);
@@ -1477,7 +1423,7 @@ static int insight_chown(const char *path, uid_t uid, gid_t gid) {
 
   struct stat fstat;
   char *last = strlast(canon_path+1, '/');
-  unsigned long hash = hash_path(last, strlen(last));
+  unsigned long hash = hash_path(last);
 
   if (have_file_by_hash(hash, &fstat)) {
     char *fullname = fullname_from_inode(hash);
@@ -1506,7 +1452,7 @@ static int insight_truncate(const char *path, off_t size) {
 
   struct stat fstat;
   char *last = strlast(canon_path+1, '/');
-  unsigned long hash = hash_path(last, strlen(last));
+  unsigned long hash = hash_path(last);
 
   if (have_file_by_hash(hash, &fstat)) {
     char *fullname = fullname_from_inode(hash);
@@ -1537,7 +1483,7 @@ static int insight_utimens(const char *path, const struct timespec ts[2]) {
 
   struct stat fstat;
   char *last = strlast(canon_path+1, '/');
-  unsigned long hash = hash_path(last, strlen(last));
+  unsigned long hash = hash_path(last);
 
   if (have_file_by_hash(hash, &fstat)) {
     char *fullname = fullname_from_inode(hash);
@@ -1582,7 +1528,7 @@ static int insight_utime(const char *path, struct utimbuf *buf) {
   struct stat fstat;
 
   if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(canon_path+1, strlen(canon_path)-1));
+    char *fullname = fullname_from_inode(hash_path(canon_path+1));
     DEBUG("Change times of real file: %s", fullname);
     if (utime(fullname, buf)==-1) {
       PMSG(LOG_ERR, "utime(\"%s\", tv) failed: %s", fullname, strerror(errno));
@@ -1615,7 +1561,7 @@ static int insight_open(const char *path, struct fuse_file_info *fi) {
   DEBUG("Last returned \"%s\"", last);
 
   if (have_file_by_name(last, &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(last, strlen(last)));
+    char *fullname = fullname_from_inode(hash_path(last));
     int res;
     DEBUG("Opening real file: %s", fullname);
     if ((res=open(fullname, fi->flags|O_RDONLY))==-1) {
@@ -1662,7 +1608,7 @@ static int insight_read(const char *path, char *buf, size_t size, off_t offset, 
   char *last = strlast(canon_path, '/');
 
   if (have_file_by_name(last, &fstat)) {
-    unsigned long hash = hash_path(last, strlen(last));
+    unsigned long hash = hash_path(last);
     char *fullname = fullname_from_inode(hash);
     int fd;
     DEBUG("Opening real file: %s", fullname);
@@ -1709,7 +1655,7 @@ static int insight_write(const char *path, const char *buf, size_t size, off_t o
   char *last = strlast(canon_path, '/');
 
   if (have_file_by_name(last, &fstat)) {
-    unsigned long hash = hash_path(last, strlen(last));
+    unsigned long hash = hash_path(last);
     char *fullname = fullname_from_inode(hash);
     int fd;
     DEBUG("Opening real file: %s", fullname);
@@ -1804,7 +1750,7 @@ static int insight_setxattr(const char *path, const char *name, const char *valu
   struct stat fstat;
 
   if (have_file_by_name(last, &fstat)) {
-    fileptr inode = hash_path(last, strlen(last));
+    fileptr inode = hash_path(last);
     char *fullname = fullname_from_inode(inode);
     ifree(last);
     if (strncmp(name, "insight.", 8)==0) {
@@ -1863,7 +1809,7 @@ static int insight_getxattr(const char *path, const char *name, char *value, siz
   struct stat fstat;
 
   if (have_file_by_name(last, &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(last, strlen(last)));
+    char *fullname = fullname_from_inode(hash_path(last));
     ifree(last);
     DEBUG("Get attribute of real file: %s", fullname);
     int res = getxattr(fullname, name, value, size);
@@ -1903,7 +1849,7 @@ static int insight_listxattr(const char *path, char *list, size_t size) {
   struct stat fstat;
 
   if (have_file_by_name(last, &fstat)) {
-    char *fullname = fullname_from_inode(hash_path(last, strlen(last)));
+    char *fullname = fullname_from_inode(hash_path(last));
     ifree(last);
     DEBUG("List attributes of real file: %s", fullname);
     int res = listxattr(fullname, list, size);
@@ -1942,7 +1888,7 @@ static int insight_removexattr(const char *path, const char *name) {
   struct stat fstat;
 
   if (have_file_by_name(last, &fstat)) {
-    fileptr inode = hash_path(last, strlen(last));
+    fileptr inode = hash_path(last);
     char *fullname = fullname_from_inode(inode);
     ifree(last);
     if (strncmp(name, "insight.", 8)==0) {
@@ -2390,7 +2336,7 @@ int main(int argc, char *argv[]) {
   insight.funcs.add_auto_tag = auto_attr_addbyname_rec;
   insight.funcs.del_tag = attr_delbyname;
   insight.funcs.del_auto_tag = auto_attr_delbyname;
-  insight.funcs.get_inode = get_inode;
+  insight.funcs.get_inode = hash_path;
   insight.funcs.log = insight_log;
 
   /* load plugins */
