@@ -1,0 +1,6 @@
+ - Add attribute lists (i.e. you can see which attributes are applied to a file)
+ - mkdir() is ugly and seems to be broken
+ - rmdir() may also be broken
+ - Implement NOT query parsing and generation
+ - Note: if the top level of a query tree has negation flag set, it's equivalent to (ALL_FILES and NOT (query))
+ - Fix memory leaks
