@@ -10,6 +10,9 @@ AC_CONFIG_SRCDIR(src/insight.c)
 AC_PROG_CC
 AC_PROG_LIBTOOL
 
+# automake oddness
+AM_PROG_CC_C_O
+
 # check for libraries
 AC_SEARCH_LIBS(dlsym, [dl])
 
