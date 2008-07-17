@@ -231,7 +231,7 @@ unsigned long hash_path_old(const char *path) {
 
   /* bit of molding */
   char *p_orig = strlast(path, '/');
-  char *p = p_orig + 1;
+  char *p = p_orig; /* for later free()ing */
   int len = strlen(p);
 
 	pad = (unsigned long) len | ((unsigned long) len << 8);
@@ -318,12 +318,15 @@ unsigned long hash_path_old(const char *path) {
 unsigned long hash_path(const char * path) {
   /* bit of molding */
   char *d_orig = strlast(path, '/');
-  char *data = d_orig + 1;
+  char *data = d_orig; /* for later free()ing */
   int len = strlen(data);
 
   uint32_t hash = len, tmp;
   int rem;
-  if (len <= 0 || data == NULL) return 0;
+  if (len <= 0 || data == NULL) {
+    ifree(d_orig);
+    return 0;
+  }
   rem = len & 3;
   len >>= 2;
   for (;len > 0; len--) {

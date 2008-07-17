@@ -289,24 +289,37 @@ char *gen_repos_path(const char *hash, int create) {
   return finaldest;
 }
 
-int have_file_by_shash(const char *hash, struct stat *fstat) {
+inline int have_file_by_shash(const char *hash) {
+  return !!tree_sub_search(tree_get_iroot(), hash);
+}
+
+inline int have_file_by_hash(const unsigned long hash) {
+  char s_hash[9];
+  snprintf(s_hash, 9, "%08lX", hash);
+  return have_file_by_shash(s_hash);
+}
+
+inline int have_file_by_name(const char *path) {
+  return have_file_by_hash(hash_path(path));
+}
+
+inline int get_file_link_by_shash(const char *hash, struct stat *fstat) {
   char *filepath = gen_repos_path(hash, 0);
   if (!filepath) return 0;
-  struct stat s;
 
-  int ret = !((stat(filepath, fstat?fstat:&s) == -1) && (errno == ENOENT));
+  int ret = !((stat(filepath, fstat) == -1) && (errno == ENOENT));
   ifree(filepath);
   return ret;
 }
 
-int have_file_by_hash(const unsigned long hash, struct stat *fstat) {
+inline int get_file_link_by_hash(const unsigned long hash, struct stat *fstat) {
   char s_hash[9];
   snprintf(s_hash, 9, "%08lX", hash);
-  return have_file_by_shash(s_hash, fstat);
+  return get_file_link_by_shash(s_hash, fstat);
 }
 
-int have_file_by_name(const char *path, struct stat *fstat) {
-  return have_file_by_hash(hash_path(path), fstat);
+inline int get_file_link_by_name(const char *path, struct stat *fstat) {
+  return get_file_link_by_hash(hash_path(path), fstat);
 }
 
 char *basename_from_inode(const fileptr inode) {

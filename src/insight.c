@@ -573,7 +573,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
 
   DEBUG("Getattr called on path \"%s\"", canon_path);
 
-  if (have_file_by_name(last, &fstat)) {
+  if (get_file_link_by_name(last, &fstat)) {
     ifree(last);
     DEBUG("Got a file\n");
 
@@ -855,12 +855,14 @@ static int insight_mkdir(const char *path, mode_t mode) {
   (void) mode;
 
   char *canon_path = get_canonical_path(path);
+  char *cp_orig = canon_path; /* for later free()ing */
   char *newtag = strlast(canon_path, '/');
   char *newdir = strlast(path, '/');
   char *dup = strdup(path);
   char *canon_parent = rindex(dup, '/');
   *canon_parent='\0';
   canon_parent = get_canonical_path(dup);
+  char *cpar_orig = canon_parent; /* for later free()ing */
   ifree(dup);
 
   if (canon_parent[0]=='/')
@@ -871,11 +873,17 @@ static int insight_mkdir(const char *path, mode_t mode) {
 
   if (strcmp(newdir, INSIGHT_SUBKEY_IND)==0) {
     PMSG(LOG_WARNING, "Cannot create directories named \"%s\"", INSIGHT_SUBKEY_IND);
+    ifree(newtag);
+    ifree(cp_orig);
+    ifree(cpar_orig);
     return -EPERM;
   }
 
   if (*newdir == '_') {
     PMSG(LOG_WARNING, "Cannot create directories that begin with an underscore");
+    ifree(newtag);
+    ifree(cp_orig);
+    ifree(cpar_orig);
     return -EPERM;
   }
 
@@ -886,6 +894,9 @@ static int insight_mkdir(const char *path, mode_t mode) {
 
   if (!*newdir) {
     DEBUG("Invalid (empty) directory name");
+    ifree(newtag);
+    ifree(cp_orig);
+    ifree(cpar_orig);
     return -EPERM;
   }
 
@@ -893,6 +904,9 @@ static int insight_mkdir(const char *path, mode_t mode) {
 
   if (!validate_path(canon_parent)) {
     DEBUG("Path does not exist\n");
+    ifree(newtag);
+    ifree(cp_orig);
+    ifree(cpar_orig);
     return -ENOENT;
   }
 
@@ -922,15 +936,20 @@ static int insight_mkdir(const char *path, mode_t mode) {
     last_char_in(canon_path)='\0';
     subtag=1;
   }
+  ifree(cp_orig);
 
   if (*parent_tag && (tree_root=get_tag(parent_tag))==0) {
     DEBUG("Tag \"%s\" not found", parent_tag);
+    ifree(newtag);
+    ifree(cpar_orig);
     return -ENOENT;
   }
   DEBUG("Found tag \"%s\"; tree root now %lu", parent_tag, tree_root);
 
   if (tree_sub_search(tree_root, newdir)) {
     DEBUG("Tag \"%s\" already exists in parent \"%s\"\n", newdir, parent_tag);
+    ifree(newtag);
+    ifree(cpar_orig);
     return -EEXIST;
   }
 
@@ -940,6 +959,7 @@ static int insight_mkdir(const char *path, mode_t mode) {
   initDataNode(&datan);
   if (!tree_sub_insert(tree_root, newdir, (tblock*)&datan)) {
     PMSG(LOG_ERR, "Tree insertion failed");
+    ifree(newtag);
     return -ENOSPC;
   }
   */
@@ -947,11 +967,15 @@ static int insight_mkdir(const char *path, mode_t mode) {
   DEBUG("Creating tag \"%s\"", newtag);
   if (!tag_ensure_create(newtag)) {
     PMSG(LOG_ERR, "Tree insertion failed");
+    ifree(newtag);
+    ifree(cpar_orig);
     return -ENOSPC;
   }
 
   DEBUG("Successfully inserted \"%s\" into parent \"%s\"", newdir, parent_tag);
 
+  ifree(cpar_orig);
+  ifree(newtag);
   return 0;
 }
 
@@ -961,6 +985,7 @@ static int insight_rmdir(const char *path) {
   char *canon_parent = rindex(dup, '/');
   *canon_parent='\0';
   canon_parent = get_canonical_path(dup);
+  char *cp_orig = canon_parent; /* for freeing */
   ifree(dup);
 
   if (canon_parent[0]=='/')
@@ -968,6 +993,8 @@ static int insight_rmdir(const char *path) {
 
   if (strcmp(olddir, INSIGHT_SUBKEY_IND)==0) {
     PMSG(LOG_WARNING, "Cannot remove directories named \"%s\"\n", INSIGHT_SUBKEY_IND);
+    ifree(cp_orig);
+    ifree(olddir);
     return -EPERM;
   }
 
@@ -978,6 +1005,8 @@ static int insight_rmdir(const char *path) {
 
   if (!*olddir) {
     DEBUG("Invalid (empty) directory name\n");
+    ifree(cp_orig);
+    ifree(olddir);
     return -EPERM;
   }
 
@@ -985,6 +1014,8 @@ static int insight_rmdir(const char *path) {
 
   if (!validate_path(canon_parent)) {
     DEBUG("Path does not exist\n");
+    ifree(cp_orig);
+    ifree(olddir);
     return -ENOENT;
   }
 
@@ -1002,12 +1033,16 @@ static int insight_rmdir(const char *path) {
 
   if (*parent_tag && (tree_root=get_tag(parent_tag))==0) {
     DEBUG("Tag \"%s\" not found\n", parent_tag);
+    ifree(cp_orig);
+    ifree(olddir);
     return -ENOENT;
   }
   DEBUG("Found tag \"%s\"; tree root now %lu", parent_tag, tree_root);
 
   if (!tree_sub_search(tree_root, olddir)) {
     DEBUG("Tag \"%s\" does not exist in parent \"%s\"\n", olddir, parent_tag);
+    ifree(cp_orig);
+    ifree(olddir);
     return -ENOENT;
   }
 
@@ -1017,12 +1052,18 @@ static int insight_rmdir(const char *path) {
 
   if (res<0) {
     PMSG(LOG_ERR, "Tree removal failed with error: %s\n", strerror(-res));
+    ifree(cp_orig);
+    ifree(olddir);
     return res;
   } else if (res) {
     PMSG(LOG_ERR, "IO error: Tree removal failed\n");
+    ifree(cp_orig);
+    ifree(olddir);
     return -EIO;
   }
   DEBUG("Successfully removed \"%s\" from parent \"%s\"\n", olddir, parent_tag);
+  ifree(cp_orig);
+  ifree(olddir);
 
   return 0;
 }
@@ -1118,9 +1159,7 @@ static int insight_mknod(const char *path, mode_t mode, dev_t rdev) {
     unsigned long hash = hash_path(bits[count-1]);
     DEBUG("Which gives us hash %08lx", hash);
 
-    struct stat fstat;
-
-    if (have_file_by_hash(hash, &fstat)) {
+    if (have_file_by_hash(hash)) {
       res = attr_addbyname(hash, bits[count-2]);
       if (res) {
         DEBUG("Error tagging! %s", strerror(-res));
@@ -1364,11 +1403,10 @@ static int insight_chmod(const char *path, mode_t mode) {
 
   DEBUG("Change mode of \"%s\" to %05o", canon_path, mode & 07777);
 
-  struct stat fstat;
   char *last = strlast(canon_path+1, '/');
   unsigned long hash = hash_path(last);
 
-  if (have_file_by_hash(hash, &fstat)) {
+  if (have_file_by_hash(hash)) {
     char *fullname = fullname_from_inode(hash);
     DEBUG("Changing mode of real file: %s", fullname);
     if (chmod(fullname, mode)==-1) {
@@ -1421,11 +1459,10 @@ static int insight_chown(const char *path, uid_t uid, gid_t gid) {
 
   DEBUG("Change ownership of \"%s\" to %d:%d", canon_path, uid, gid);
 
-  struct stat fstat;
   char *last = strlast(canon_path+1, '/');
   unsigned long hash = hash_path(last);
 
-  if (have_file_by_hash(hash, &fstat)) {
+  if (have_file_by_hash(hash)) {
     char *fullname = fullname_from_inode(hash);
     DEBUG("Change ownership of real file: %s", fullname);
     if (chown(fullname, uid, gid)==-1) {
@@ -1450,11 +1487,10 @@ static int insight_truncate(const char *path, off_t size) {
 
   DEBUG("Truncate \"%s\" to %lld bytes", canon_path, size);
 
-  struct stat fstat;
   char *last = strlast(canon_path+1, '/');
   unsigned long hash = hash_path(last);
 
-  if (have_file_by_hash(hash, &fstat)) {
+  if (have_file_by_hash(hash)) {
     char *fullname = fullname_from_inode(hash);
     DEBUG("Truncating real file: %s", fullname);
     if (truncate(fullname, size)==-1) {
@@ -1481,11 +1517,10 @@ static int insight_utimens(const char *path, const struct timespec ts[2]) {
 
   DEBUG("Changing times of \"%s\"", path);
 
-  struct stat fstat;
   char *last = strlast(canon_path+1, '/');
   unsigned long hash = hash_path(last);
 
-  if (have_file_by_hash(hash, &fstat)) {
+  if (have_file_by_hash(hash)) {
     char *fullname = fullname_from_inode(hash);
     struct timeval tv[2];
     DEBUG("Change times of real file: %s", fullname);
@@ -1525,9 +1560,8 @@ static int insight_utime(const char *path, struct utimbuf *buf) {
 
   DEBUG("Changing times of \"%s\"", path);
 
-  struct stat fstat;
 
-  if (have_file_by_name(strlast(canon_path+1, '/'), &fstat)) {
+  if (have_file_by_name(strlast(canon_path+1, '/'))) {
     char *fullname = fullname_from_inode(hash_path(canon_path+1));
     DEBUG("Change times of real file: %s", fullname);
     if (utime(fullname, buf)==-1) {
@@ -1555,12 +1589,11 @@ static int insight_open(const char *path, struct fuse_file_info *fi) {
 
   DEBUG("Open on path \"%s\"", canon_path);
 
-  struct stat fstat;
   char *last = strlast(canon_path, '/');
 
   DEBUG("Last returned \"%s\"", last);
 
-  if (have_file_by_name(last, &fstat)) {
+  if (have_file_by_name(last)) {
     char *fullname = fullname_from_inode(hash_path(last));
     int res;
     DEBUG("Opening real file: %s", fullname);
@@ -1604,10 +1637,9 @@ static int insight_read(const char *path, char *buf, size_t size, off_t offset, 
 
   DEBUG("Read on path \"%s\"", canon_path);
 
-  struct stat fstat;
   char *last = strlast(canon_path, '/');
 
-  if (have_file_by_name(last, &fstat)) {
+  if (have_file_by_name(last)) {
     unsigned long hash = hash_path(last);
     char *fullname = fullname_from_inode(hash);
     int fd;
@@ -1651,10 +1683,9 @@ static int insight_write(const char *path, const char *buf, size_t size, off_t o
 
   DEBUG("Write on path \"%s\"", canon_path);
 
-  struct stat fstat;
   char *last = strlast(canon_path, '/');
 
-  if (have_file_by_name(last, &fstat)) {
+  if (have_file_by_name(last)) {
     unsigned long hash = hash_path(last);
     char *fullname = fullname_from_inode(hash);
     int fd;
@@ -1747,9 +1778,8 @@ static int insight_setxattr(const char *path, const char *name, const char *valu
 
   DEBUG("Set \"%s\" extended attribute of \"%s\"", name, canon_path);
 
-  struct stat fstat;
 
-  if (have_file_by_name(last, &fstat)) {
+  if (have_file_by_name(last)) {
     fileptr inode = hash_path(last);
     char *fullname = fullname_from_inode(inode);
     ifree(last);
@@ -1806,9 +1836,8 @@ static int insight_getxattr(const char *path, const char *name, char *value, siz
   char *last = strlast(canon_path+1, '/');
   DEBUG("Get \"%s\" extended attribute of \"%s\"", name, canon_path);
 
-  struct stat fstat;
 
-  if (have_file_by_name(last, &fstat)) {
+  if (have_file_by_name(last)) {
     char *fullname = fullname_from_inode(hash_path(last));
     ifree(last);
     DEBUG("Get attribute of real file: %s", fullname);
@@ -1846,9 +1875,8 @@ static int insight_listxattr(const char *path, char *list, size_t size) {
   char *last = strlast(canon_path+1, '/');
   DEBUG("List extended attributes of \"%s\"", canon_path);
 
-  struct stat fstat;
 
-  if (have_file_by_name(last, &fstat)) {
+  if (have_file_by_name(last)) {
     char *fullname = fullname_from_inode(hash_path(last));
     ifree(last);
     DEBUG("List attributes of real file: %s", fullname);
@@ -1885,9 +1913,8 @@ static int insight_removexattr(const char *path, const char *name) {
   char *last = strlast(canon_path+1, '/');
   DEBUG("Remove extended attribute \"%s\" of \"%s\"", name, canon_path);
 
-  struct stat fstat;
 
-  if (have_file_by_name(last, &fstat)) {
+  if (have_file_by_name(last)) {
     fileptr inode = hash_path(last);
     char *fullname = fullname_from_inode(inode);
     ifree(last);

@@ -685,7 +685,7 @@ static int tree_cache_put(fileptr block, tblock *data) {
  * @returns The index of the first key in the node that is greater than \a key.
  * @todo Make this use binary search.
  */
-static int tree_find_key(tnode *node, char *key) {
+static int tree_find_key(tnode *node, const char *key) {
   int k=0;
   //DEBUG("Searching for key \"%s\"", key);
   for (k=0; k<node->keycount; k++) {
@@ -832,7 +832,7 @@ int tree_sub_get_min(fileptr root, tnode *node) {
  * @param[out] node A pointer to the data block associated with \a key.
  * @returns See tree_sub_get()
  */
-int tree_get(char *key, tblock *node) {
+int tree_get(const char *key, tblock *node) {
   return tree_sub_get(tree_sb->root_index, key, node);
 }
 
@@ -847,7 +847,7 @@ int tree_get(char *key, tblock *node) {
  * @retval ENOENT The key was not found in the tree.
  * @retval EIO There was an I/O error while reading the block.
  */
-int tree_sub_get(fileptr root, char *key, tblock *node) {
+int tree_sub_get(fileptr root, const char *key, tblock *node) {
   fileptr dblock = tree_sub_search(root, key);
 
   if (!dblock) return ENOENT;
@@ -862,14 +862,14 @@ int tree_sub_get(fileptr root, char *key, tblock *node) {
  * @param key The key to used for the search.
  * @returns See tree_sub_search()
  */
-fileptr tree_search(char *key) {
+fileptr tree_search(const char *key) {
   return tree_sub_search(tree_sb->root_index, key);
 }
 
 /*
  * search tree with given root for given key and return data block index
  */
-fileptr tree_sub_search(fileptr root, char *key) {
+fileptr tree_sub_search(fileptr root, const char *key) {
   tnode node;
   int index;
 
@@ -1085,7 +1085,7 @@ static int tree_insert_recurse (fileptr root, char **key, fileptr *ptr) {
 /*
  * insert a data block into the tree with the given key
  */
-fileptr tree_insert (tkey key, tblock *data) {
+fileptr tree_insert (const tkey key, tblock *data) {
   DEBUG("Inserting into root tree with key \"%s\"", key);
   return tree_sub_insert(0, key, data);
 }
@@ -1096,7 +1096,7 @@ fileptr tree_insert (tkey key, tblock *data) {
  *
  * @param root The index of the \b DATA node
  */
-fileptr tree_sub_insert(fileptr root, tkey key, tblock *data) {
+fileptr tree_sub_insert(fileptr root, const tkey key, tblock *data) {
   fileptr newnode;
   fileptr ptr, split;
   tdata dataroot;
@@ -1480,7 +1480,7 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
 /*
  * Remove a node and any associated inode blocks
  */
-int tree_remove (tkey key) {
+int tree_remove (const tkey key) {
   DEBUG("Removing key \"%s\" from root tree", key);
   return tree_sub_remove(0, key);
 }
@@ -1488,7 +1488,7 @@ int tree_remove (tkey key) {
 /*
  * Remove a node from the given subtree and any associated inode blocks
  */
-int tree_sub_remove(fileptr root, tkey key) {
+int tree_sub_remove(fileptr root, const tkey key) {
   fileptr ptr=0;
   int merge;
   tdata dataroot;

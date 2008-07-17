@@ -34,6 +34,7 @@ int strcount(const char *haystack, const char needle);
 char *strlast(const char *input, const char sep);
 int strsplitmap(const char *input, const char sep, int (*func)(const char *, unsigned long), unsigned long data);
 char **strsplit(const char *input, const char sep, int *count);
+unsigned long hash_path_old(const char *path);
 unsigned long hash_path(const char *path);
 
 #endif

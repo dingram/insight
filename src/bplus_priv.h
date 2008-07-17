@@ -74,7 +74,7 @@ static int      tree_format        ();
 static int      tree_format_free   (fileptr start, fileptr size);
 static fileptr  tree_alloc         (void);
 static int      tree_free          (fileptr block);
-static int      tree_find_key      (tnode *node, char *key);
+static int      tree_find_key      (tnode *node, const char *key);
 static int      tree_insert_key    (tnode *node, unsigned int keyindex, char **key, fileptr *ptr);
 static int      tree_insert_recurse(fileptr root, char **key, fileptr *ptr);
 static int      _tree_write        (fileptr block, tblock *data);
