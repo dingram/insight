@@ -258,6 +258,12 @@ int check_mkdir(const char *path) {
   return 0;
 }
 
+/**
+ * Generate a repository path, given a hash. If \a create is 1, then the
+ * directories will be created as required. If \a create is 2, then the
+ * existence of the directories will be checked. Otherwise, if \a create is 0,
+ * the path will just be generated.
+ */
 char *gen_repos_path(const char *hash, int create) {
   char *finaldest;
   int i;
@@ -273,11 +279,12 @@ char *gen_repos_path(const char *hash, int create) {
   for (i=0; i<6; i+=2) {
     strcat(finaldest, "/");
     strncat(finaldest, hash+i, 2);
+    if (create==0) continue;
     DEBUG("Checking %s exists...", finaldest);
-    if (!create && !checkdir(finaldest)) {
+    if (create==1 && check_mkdir(finaldest)) {
       ifree(finaldest);
       return NULL;
-    } else if (create && check_mkdir(finaldest)) {
+    } else if (create==2 && !checkdir(finaldest)) {
       ifree(finaldest);
       return NULL;
     }
@@ -289,14 +296,36 @@ char *gen_repos_path(const char *hash, int create) {
   return finaldest;
 }
 
-inline int have_file_by_shash(const char *hash) {
-  return !!tree_sub_search(tree_get_iroot(), hash);
+static int limbo_search(fileptr inode) {
+  profile_init_start();
+  fileptr *inodes=NULL;
+  int i, count = inode_get_all(0, NULL, 0);
+  if (count>0) {
+    inodes = calloc(count, sizeof(fileptr));
+    inode_get_all(0, inodes, count);
+  } else if (count==0) {
+    /* can't be found if no inodes in list */
+    profile_stop();
+    return 0;
+  } else if (count<0) {
+    DEBUG("Error calling inode_get_all(): %s", strerror(-count));
+    profile_stop();
+    return count;
+  }
+
+  for (i=0; i<count; i++) {
+    if (inodes[i]==inode)
+      break;
+  }
+  ifree(inodes);
+  profile_stop();
+  return (i<count)?(i+1):0;
 }
 
-inline int have_file_by_hash(const unsigned long hash) {
+int have_file_by_hash(const unsigned long hash) {
   char s_hash[9];
   snprintf(s_hash, 9, "%08lX", hash);
-  return have_file_by_shash(s_hash);
+  return tree_sub_search(tree_get_iroot(), s_hash) || limbo_search(hash)>=0;
 }
 
 inline int have_file_by_name(const char *path) {

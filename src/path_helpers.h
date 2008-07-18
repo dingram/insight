@@ -44,7 +44,6 @@ int check_mkdir(const char *path);
 char *gen_repos_path(const char *hash, int create);
 int have_file_by_name(const char *path);
 int have_file_by_hash(const unsigned long hash);
-int have_file_by_shash(const char *hash);
 int get_file_link_by_name(const char *path, struct stat *stat);
 int get_file_link_by_hash(const unsigned long hash, struct stat *stat);
 int get_file_link_by_shash(const char *hash, struct stat *stat);

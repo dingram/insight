@@ -13,12 +13,6 @@
 #define ORDER ((TREEBLOCK_SIZE - 2*sizeof(short))/(sizeof(fileptr)+sizeof(tkey))+1)
 /** Order of the inode tree - i.e. how many pointers are stored */
 #define DORDER ((TREEBLOCK_SIZE - 2*sizeof(short))/(sizeof(fileptr)+sizeof(fileptr))+1)
-/** Maximum number of inodes in a data block */
-#define DATA_INODE_MAX ((TREEBLOCK_SIZE - 2*sizeof(short) - 2*sizeof(fileptr) - sizeof(unsigned long))/sizeof(fileptr))
-/** Maximum number of inodes in an inode block */
-#define INODE_MAX ((TREEBLOCK_SIZE - sizeof(short) - 2*sizeof(unsigned long))/sizeof(fileptr))
-/** Maximum number of references in an inode data block */
-#define REF_MAX ((TREEBLOCK_SIZE - 2*sizeof(short) - sizeof(unsigned long))/sizeof(fileptr))
 
 /**
  * @defgroup MagicDefs Magic numbers
@@ -95,18 +89,42 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   char           unused[TREEBLOCK_SIZE - sizeof(unsigned long) - 2*sizeof(short) - ORDER*(sizeof(fileptr)) - (ORDER-1)*(sizeof(tkey))];
 } tnode;
 
+/** Maximum number of inodes in a data block */
+#define DATA_INODE_MAX ((TREEBLOCK_SIZE \
+                          - 2*sizeof(unsigned short)\
+                          - 3*sizeof(fileptr)\
+                          - sizeof(tkey)\
+                          - sizeof(unsigned long)\
+                        )/sizeof(fileptr))
+/** Maximum number of characters in a data node target string */
+#define DATA_TARGET_MAX (DATA_INODE_MAX*(sizeof(fileptr)/sizeof(char)))
+/** The number of extra bytes of padding required by the structure */
+#define DATA_PADDING (TREEBLOCK_SIZE - (\
+                            2*sizeof(unsigned short)\
+                          + 3*sizeof(fileptr)\
+                          + sizeof(tkey)\
+                          + sizeof(unsigned long)\
+                          + DATA_INODE_MAX*sizeof(fileptr)\
+                        ))
+
 /** Data block in the tree */
 typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   unsigned long magic;        /**< Magic number 0xda7ab10c */
   unsigned short inodecount;  /**< Number of inodes related to this key (not necessarily all stored in this node) */
-  short flags;                /**< Flags and other information about this node */
+  unsigned short flags;       /**< Flags and other information about this node */
   fileptr subkeys;            /**< Root node of subkeys tree or address of synonym target if \a flags contain \c DATA_FLAGS_SYNONYM */
   union {
-    fileptr inodes[DATA_INODE_MAX]; /**< List of inodes */
-    char    target[DATA_INODE_MAX*(sizeof(unsigned long)/sizeof(char))]; /**< Synonym target name */
+    fileptr inodes[DATA_INODE_MAX];  /**< List of inodes */
+    char    target[DATA_TARGET_MAX]; /**< Synonym target name */
   };
+  tkey    name;               /**< The key associated with this data node */
+  char    padding[DATA_PADDING]; /**< Padding (if required) */
+  fileptr parent;             /**< Address of the parent data node */
   fileptr next_inodes;        /**< Address of next block of inodes, or zero if none */
 } tdata;
+
+/** Maximum number of inodes in an inode block */
+#define INODE_MAX ((TREEBLOCK_SIZE - sizeof(short) - 2*sizeof(unsigned long))/sizeof(fileptr))
 
 /** Inode block referenced by a data block */
 typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
@@ -116,6 +134,9 @@ typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {
   fileptr inodes[INODE_MAX];  /**< List of inodes */
   fileptr next_inodes;        /**< Address of next block of inodes, or zero if none */
 } tinode;
+
+/** Maximum number of references in an inode data block */
+#define REF_MAX ((TREEBLOCK_SIZE - 2*sizeof(short) - sizeof(unsigned long))/sizeof(fileptr))
 
 /** Data block in the inode tree */
 typedef struct /** @cond */ __attribute__((__packed__)) /** @endcond */ {

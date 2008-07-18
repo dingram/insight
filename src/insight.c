@@ -554,6 +554,20 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
   profile_init_start();
   DEBUG("Getattr called on path \"%s\"", path);
 
+  /* special case: root */
+  if (strcmp(path, "/")==0) {
+    DEBUG("Getattr called on root path\n");
+    /* steal a default stat structure */
+    memcpy(stbuf, &insight.mountstat, sizeof(struct stat));
+    /* last modified times are the same as the tree last modified time */
+    stbuf->st_atime = stbuf->st_ctime = stbuf->st_mtime = tree_get_mtime();
+    stbuf->st_mode = S_IFDIR | 0755;
+    stbuf->st_nlink = tree_key_count();
+    stbuf->st_ino = 1;
+    profile_stopf("path: %s", path);
+    return 0;
+  }
+
   DEBUG("Generating query tree");
   qelem *q = path_to_query(path);
 
@@ -591,18 +605,6 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
 
     /* last modified times are the same as the tree last modified time */
     stbuf->st_atime = stbuf->st_ctime = stbuf->st_mtime = tree_get_mtime();
-
-    /* special case: root */
-    if (strcmp(canon_path, "/")==0) {
-      DEBUG("Getattr called on root path\n");
-      stbuf->st_mode = S_IFDIR | 0755;
-      stbuf->st_nlink = tree_key_count();
-      stbuf->st_ino = 1;
-      qtree_free(&q, 1);
-      ifree(canon_path);
-      profile_stopf("path: %s", path);
-      return 0;
-    }
 
     if (strlen(path)>2 && last_char_in(path)==INSIGHT_SUBKEY_IND_C && path[strlen(path)-2]=='/') {
       /* just a subkey indicator directory */
@@ -1840,21 +1842,34 @@ static int insight_getxattr(const char *path, const char *name, char *value, siz
   if (have_file_by_name(last)) {
     char *fullname = fullname_from_inode(hash_path(last));
     ifree(last);
-    DEBUG("Get attribute of real file: %s", fullname);
-    int res = getxattr(fullname, name, value, size);
-    if (res==-1) {
-      if (errno != ENODATA && errno != ENOTSUP && errno != ERANGE) {
-        /* perfectly normal */
-        PMSG(LOG_ERR, "getxattr(\"%s\", \"%s\", ...) failed: %s\n", fullname, name, strerror(errno));
-      }
+    if (strcmp(name, "insight")==0) {
+      DEBUG("Insight namespace; no value\n");
       ifree(fullname);
       ifree(canon_path);
-      return -errno;
+      return 0;
+    } else if (strncmp(name, "insight.", 8)==0) {
+      DEBUG("Insight attribute; no value\n");
+      /* TODO: check the attribute name is actually valid and applied to the file */
+      ifree(fullname);
+      ifree(canon_path);
+      return 0;
     } else {
-      DEBUG("\n");
-      ifree(fullname);
-      ifree(canon_path);
-      return res;
+      DEBUG("Get attribute of real file: %s", fullname);
+      int res = getxattr(fullname, name, value, size);
+      if (res==-1) {
+        if (errno != ENODATA && errno != ENOTSUP && errno != ERANGE) {
+          /* perfectly normal */
+          PMSG(LOG_ERR, "getxattr(\"%s\", \"%s\", ...) failed: %s\n", fullname, name, strerror(errno));
+        }
+        ifree(fullname);
+        ifree(canon_path);
+        return -errno;
+      } else {
+        DEBUG("\n");
+        ifree(fullname);
+        ifree(canon_path);
+        return res;
+      }
     }
   } else if (validate_path(canon_path)) {
     DEBUG("Cannot get extended attributes on directories\n");
@@ -1879,7 +1894,12 @@ static int insight_listxattr(const char *path, char *list, size_t size) {
   if (have_file_by_name(last)) {
     char *fullname = fullname_from_inode(hash_path(last));
     ifree(last);
-    DEBUG("List attributes of real file: %s", fullname);
+#ifdef _DEBUG
+    if (!list || !size)
+      DEBUG("Finding length of attribute list");
+    else
+      DEBUG("List attributes of real file: %s", fullname);
+#endif
     int res = listxattr(fullname, list, size);
     if (res==-1) {
       if (errno != ENOTSUP && errno != ERANGE) {
@@ -1889,6 +1909,17 @@ static int insight_listxattr(const char *path, char *list, size_t size) {
       ifree(canon_path);
       return -errno;
     } else {
+#ifdef _DEBUG
+      if (!list || !size)
+        DEBUG("List length: %d", res);
+      else
+        DEBUG("Total size of attribute names: %d", res);
+#endif
+      /* TODO: get list of attributes applied to file and their names */
+      if (list && size>=(size_t)res) {
+        strcpy(&list[res], "insight");
+      }
+      res += 8; /* "insight\0" */
       ifree(fullname);
       ifree(canon_path);
       DEBUG("\n");

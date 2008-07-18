@@ -2,5 +2,7 @@
  - mkdir() is ugly and seems to be broken
  - rmdir() may also be broken
  - Implement NOT query parsing and generation
- - Note: if the top level of a query tree has negation flag set, it's equivalent to (ALL_FILES and NOT (query))
+ - Note: if the top level of a query tree has negation flag set, it's equivalent to (ALL_FILES AND NOT (query))
+ - Directory synonyms
+ - OR with (say) branch 2 negated = (b1 OR (ALL_FILES AND NOT b2)
  - Fix memory leaks
