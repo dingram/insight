@@ -265,33 +265,35 @@ int check_mkdir(const char *path) {
  * the path will just be generated.
  */
 char *gen_repos_path(const char *hash, int create) {
-  char *finaldest;
-  int i;
-
-  finaldest = calloc(strlen(insight.repository)+strlen("/01/23/45/01234567")+1, sizeof(char));
+  char *finaldest = calloc(insight.repository_len+strlen("/01/23/45/01234567")+1, sizeof(char));
   if (!finaldest) {
     PMSG(LOG_ERR, "Failed to allocate memory");
     return NULL;
   }
   strcpy(finaldest, insight.repository);
+  char *finalptr = finaldest + insight.repository_len;
   /* finaldest guaranteed to exist so far */
+  int i;
 
   for (i=0; i<6; i+=2) {
-    strcat(finaldest, "/");
-    strncat(finaldest, hash+i, 2);
+    *finalptr++ = '/';
+    *finalptr++ = hash[i];
+    *finalptr++ = hash[i+1];
     if (create==0) continue;
-    DEBUG("Checking %s exists...", finaldest);
     if (create==1 && check_mkdir(finaldest)) {
+      DEBUG("Path %s could not be created", finaldest);
       ifree(finaldest);
       return NULL;
     } else if (create==2 && !checkdir(finaldest)) {
+      DEBUG("Path %s does not exist", finaldest);
       ifree(finaldest);
       return NULL;
     }
   }
 
-  strcat(finaldest, "/");
-  strcat(finaldest, hash);
+  *finalptr++ = '/';
+  strcpy(finalptr, hash);
+  DEBUG("Final repository path: \"%s\"", finaldest);
 
   return finaldest;
 }
@@ -324,8 +326,8 @@ static int limbo_search(fileptr inode) {
 
 int have_file_by_hash(const unsigned long hash) {
   char s_hash[9];
-  snprintf(s_hash, 9, "%08lX", hash);
-  return tree_sub_search(tree_get_iroot(), s_hash) || limbo_search(hash)>=0;
+  hex_to_string(s_hash, hash);
+  return tree_sub_search(tree_get_iroot(), s_hash) || limbo_search(hash)>0;
 }
 
 inline int have_file_by_name(const char *path) {
@@ -343,7 +345,7 @@ inline int get_file_link_by_shash(const char *hash, struct stat *fstat) {
 
 inline int get_file_link_by_hash(const unsigned long hash, struct stat *fstat) {
   char s_hash[9];
-  snprintf(s_hash, 9, "%08lX", hash);
+  hex_to_string(s_hash, hash);
   return get_file_link_by_shash(s_hash, fstat);
 }
 
@@ -368,7 +370,7 @@ char *basename_from_inode(const fileptr inode) {
 
 char *fullname_from_inode(const fileptr inode) {
   char hash[9];
-  snprintf(hash, 9, "%08lX", inode);
+  hex_to_string(hash, inode);
   DEBUG("Input hash: %s", hash);
   char *filepath = gen_repos_path(hash, 0);
   DEBUG("Repository path: %s", filepath);
@@ -412,6 +414,13 @@ static int _sibcallback(const char *key, const fileptr val, void *data) {
     PMSG(LOG_ERR, "SERIOUS ERROR");
     return -1;
   }
+#ifdef _DEBUG
+  DEBUG("Key: \"%s\"", key);
+  DEBUG("Prefix: \"%s\"", thing->prefix);
+  char *fullkey = tree_get_full_key(val);
+  DEBUG("Full key: \"%s\"", fullkey);
+  ifree(fullkey);
+#endif
   if (thing->prefix && *(thing->prefix)) {
     thing->sibs[thing->cur] = calloc(strlen(thing->prefix)+strlen(key)+1, sizeof(char));
     strcpy(thing->sibs[thing->cur], thing->prefix);
@@ -520,7 +529,7 @@ char **path_get_dirs(const char *path, unsigned int *count) {
     return path_get_subkeys(path, count);
   }
 
-  DEBUG("\033[1;33mGetting directories for path: %s\033[m", path);
+  DEBUG("Getting directories for path: %s", path);
 
   unsigned int alloc_count=0, pathcount=0;
   // count amount of space we'll need in PATHS set
@@ -659,8 +668,6 @@ char **path_get_dirs(const char *path, unsigned int *count) {
     DEBUG("Freeing \"%s\" (%p)", outset[i], outset[i]);
     ifree(outset[i]);
   }
-
-  outset = realloc(outset, out_count * sizeof(char *));
 
   *count = out_count;
   return outset;

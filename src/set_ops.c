@@ -63,6 +63,52 @@ int pstrcmp(const void *p1, const void *p2) {
   return strcmp(*(char * const *) p1, *(char * const *) p2);
 }
 
+#undef get32bits
+/*
+#if (defined(__GNUC__) && defined(__i386__)) || defined(__WATCOMC__) \
+  || defined(_MSC_VER) || defined (__BORLANDC__) || defined (__TURBOC__)
+  */
+#define get32bits(d) (*((uint32_t *)(d)))
+/*#endif*/
+
+#undef get16bits
+/*
+#if (defined(__GNUC__) && defined(__i386__)) || defined(__WATCOMC__) \
+  || defined(_MSC_VER) || defined (__BORLANDC__) || defined (__TURBOC__)
+  */
+#define get16bits(d) (*((uint16_t *)(d)))
+/*#endif*/
+
+#undef get8bits
+#define get8bits(d,o) (((uint8_t *)(d))[o])
+
+#define SHORTSWAP(x, y) do { (x) ^= (y); (y) ^= (x); (x) ^= (y); } while (0)
+
+
+/**
+ * Swap two items using fast 32-bit XOR operations rather than memcpy().
+ */
+inline void _doSwap(void *a, void *b, size_t elem_size) {
+  int rem;
+  void *ai=a, *bi=b;
+  rem = elem_size & 3;
+  elem_size >>= 2;
+
+  for (;elem_size > 0; elem_size--) {
+    SHORTSWAP(get32bits(ai), get32bits(bi));
+    ai+=sizeof(uint32_t);
+    bi+=sizeof(uint32_t);
+  }
+  switch (rem) {
+    case 3: SHORTSWAP(get16bits(ai),   get16bits(bi)  );
+            SHORTSWAP(get8bits(ai, 2), get8bits(bi, 2));
+            break;
+    case 2: SHORTSWAP(get16bits(ai),   get16bits(bi)  );
+            break;
+    case 1: SHORTSWAP(get8bits(ai, 0), get8bits(bi, 0));
+  }
+}
+
 
 /**
  * Creates the union of two sorted arrays. The output array should be \a
@@ -220,8 +266,6 @@ int set_diff(void *set1, const void const * const set2, size_t in1count, size_t 
     return in1count;
   }
 
-  void *tmp=calloc(1, elem_size); /* could eliminate this with careful XORing, but is that much optimisation really necessary? */
-  if (!tmp) return -ENOMEM;
   void *p=set1-elem_size;
   void *q=set1;
   void *max=set1+(in1count*elem_size);
@@ -239,11 +283,7 @@ int set_diff(void *set1, const void const * const set2, size_t in1count, size_t 
       p+=elem_size;
       if (q<max) {
         if (p<q) {
-          DEBUG("Swapping");
-          /* TODO: better swap function? */
-          memcpy(tmp, p, elem_size);
-          memcpy(p, q, elem_size);
-          memcpy(q, tmp, elem_size);
+          _doSwap(p, q, elem_size);
         }
         q+=elem_size;
       }
@@ -269,7 +309,6 @@ int set_diff(void *set1, const void const * const set2, size_t in1count, size_t 
     in1count = 1 + (p-set1)/elem_size;
   else if (ri<rmax && c==0)
     in1count=0;
-  ifree(tmp);
   return in1count;
 }
 
@@ -299,8 +338,6 @@ int set_uniq(void *set, size_t count, size_t elem_size, int (*cmp)(const void*, 
   }
 
   void *p, *q, *max;
-  void *tmp=calloc(1, elem_size); /* could eliminate this with careful XORing, but is that much optimisation really necessary? */
-  if (!tmp) return -ENOMEM;
   p=set;
   q=set+elem_size;
   max=set+(count*elem_size);
@@ -309,10 +346,7 @@ int set_uniq(void *set, size_t count, size_t elem_size, int (*cmp)(const void*, 
       p+=elem_size;
       if (q<max) {
         if (p<q) {
-          /* TODO: better swap function? */
-          memcpy(tmp, p, elem_size);
-          memcpy(p, q, elem_size);
-          memcpy(q, tmp, elem_size);
+          _doSwap(p, q, elem_size);
         }
         q+=elem_size;
       }
@@ -328,6 +362,5 @@ int set_uniq(void *set, size_t count, size_t elem_size, int (*cmp)(const void*, 
   DUMPUINT(p-set);
   if (count > (p-set)/elem_size)
     count = 1 + (p-set)/elem_size;
-  ifree(tmp);
   return count;
 }

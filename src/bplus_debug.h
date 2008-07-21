@@ -21,7 +21,7 @@ static inline void DUMPNODE(tnode *node) {
   printf("  leaf:     %d\n", node->leaf);
   printf("  keycount: %d\n", node->keycount);
   printf("  ptrs:");
-  for(i=0;i<ORDER;i++) printf(node->ptrs[i]>99?" [\033[1;33m%lu\033[m]":(i>node->keycount?" [\033[4m%lu\033[m]":" [%lu]"), node->ptrs[i]);
+  for(i=0;i<ORDER;i++) printf(i>node->keycount?" [\033[4m%lu\033[m]":" [%lu]", node->ptrs[i]);
   printf("\n");
   printf("  keys:");
   for(i=0;i<ORDER-1;i++) printf(i>=node->keycount?" [\033[4m%s\033[m]":" [%s]", node->keys[i]);
@@ -36,6 +36,8 @@ static inline void DUMPDATA(tdata *node) {
   printf("  inodes:");
   for(i=0;i<DATA_INODE_MAX;i++) printf((i>=node->inodecount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->inodes[i]);
   printf("\n");
+  printf("  name: %s\n", node->name);
+  printf("  parent: %lu\n", node->parent);
   printf("  next_inodes: %lu\n", node->next_inodes);
 }
 static inline void DUMPINODE(tinode *node) {

@@ -110,17 +110,18 @@
  * Command line options
  */
 struct insight {
-  int    debug;         /**< Debug mode */
-  int    foreground;    /**< Run in foreground */
-  int    singlethread;  /**< Single thread mode */
-  int    readonly;      /**< Mount filesystem readonly */
-  int    verbose;       /**< Enable verbose logging (syslog only) */
-  int    quiet;         /**< Log very little */
+  int    debug;          /**< Debug mode */
+  int    foreground;     /**< Run in foreground */
+  int    singlethread;   /**< Single thread mode */
+  int    readonly;       /**< Mount filesystem readonly */
+  int    verbose;        /**< Enable verbose logging (syslog only) */
+  int    quiet;          /**< Log very little */
 
-  char  *progname;      /**< "insight" */
-  char  *mountpoint;    /**< Where insight has been mounted */
-  char  *treestore;     /**< Path to the tree storage file */
-  char  *repository;    /**< Path to the symlink repository */
+  char  *progname;       /**< "insight" */
+  char  *mountpoint;     /**< Where insight has been mounted */
+  char  *treestore;      /**< Path to the tree storage file */
+  char  *repository;     /**< Path to the symlink repository */
+  size_t repository_len; /**< Length of "repository" (for speed) */
   struct stat mountstat; /**< lstat() results for mountpoint */
   struct insight_plugin *plugins; /**< Linked list of plugins */
   struct insight_funcs funcs; /**< Set of functions for export to plugins */

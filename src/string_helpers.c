@@ -44,8 +44,7 @@
  * @returns The number of times the character appears within the string.
  */
 int strcount(const char *haystack, const char needle) {
-  char *dup = strdup(haystack);
-  char *tmp = dup;
+  char *tmp = (char *)haystack;
   int count=0;
 
   DEBUG("Counting instances of \"%c\" in \"%s\".", needle, haystack);
@@ -55,7 +54,6 @@ int strcount(const char *haystack, const char needle) {
   }
   DEBUG("String has %d instances of %c", count, needle);
   tmp=NULL;
-  ifree(dup);
   return count;
 }
 
@@ -186,6 +184,16 @@ char **strsplit(const char *input, const char sep, int *count) {
   return bits;
 }
 
+/* XXX: assumes buf is 9 chars long */
+inline void hex_to_string(char *buf, unsigned long val) {
+  int i;
+  buf[8]='\0';
+  for (i=0;i<8;i++) {
+    buf[i]='0'+((val>>4*(7-i))&0x0f);
+    if (buf[i]>'9') buf[i]+=('A'-':');
+  }
+}
+
 
 /* ************************************************************************ */
 /*   This code copied from reiserfs due to time constraints. Algorithm is   */
@@ -220,7 +228,7 @@ char **strsplit(const char *input, const char sep, int *count) {
 	} while(0)
 
 
-unsigned long hash_path_old(const char *path) {
+unsigned long hash_path_old(char const *path) {
 
 	unsigned long k[] = { 0x9464a485, 0x542e1a94, 0x3e846bff, 0xb75bcfc3 };
 
@@ -229,77 +237,72 @@ unsigned long hash_path_old(const char *path) {
 	unsigned long pad;
 	int i;
 
-  /* bit of molding */
-  char *p_orig = strlast(path, '/');
-  char *p = p_orig; /* for later free()ing */
-  int len = strlen(p);
+  int len = strlen(path);
 
 	pad = (unsigned long) len | ((unsigned long) len << 8);
 	pad |= pad << 16;
 
 	while (len >= 16) {
-		a = (unsigned long) p[0] |
-		    (unsigned long) p[1] << 8 | (unsigned long) p[2] << 16 | (unsigned long) p[3] << 24;
-		b = (unsigned long) p[4] |
-		    (unsigned long) p[5] << 8 | (unsigned long) p[6] << 16 | (unsigned long) p[7] << 24;
-		c = (unsigned long) p[8] |
-		    (unsigned long) p[9] << 8 |
-		    (unsigned long) p[10] << 16 | (unsigned long) p[11] << 24;
-		d = (unsigned long) p[12] |
-		    (unsigned long) p[13] << 8 |
-		    (unsigned long) p[14] << 16 | (unsigned long) p[15] << 24;
+		a = (unsigned long) path[0] |
+		    (unsigned long) path[1] << 8 | (unsigned long) path[2] << 16 | (unsigned long) path[3] << 24;
+		b = (unsigned long) path[4] |
+		    (unsigned long) path[5] << 8 | (unsigned long) path[6] << 16 | (unsigned long) path[7] << 24;
+		c = (unsigned long) path[8] |
+		    (unsigned long) path[9] << 8 |
+		    (unsigned long) path[10] << 16 | (unsigned long) path[11] << 24;
+		d = (unsigned long) path[12] |
+		    (unsigned long) path[13] << 8 |
+		    (unsigned long) path[14] << 16 | (unsigned long) path[15] << 24;
 
 		TEACORE(PARTROUNDS);
 
 		len -= 16;
-		p += 16;
+		path += 16;
 	}
 
 	if (len >= 12) {
-		a = (unsigned long) p[0] |
-		    (unsigned long) p[1] << 8 | (unsigned long) p[2] << 16 | (unsigned long) p[3] << 24;
-		b = (unsigned long) p[4] |
-		    (unsigned long) p[5] << 8 | (unsigned long) p[6] << 16 | (unsigned long) p[7] << 24;
-		c = (unsigned long) p[8] |
-		    (unsigned long) p[9] << 8 |
-		    (unsigned long) p[10] << 16 | (unsigned long) p[11] << 24;
+		a = (unsigned long) path[0] |
+		    (unsigned long) path[1] << 8 | (unsigned long) path[2] << 16 | (unsigned long) path[3] << 24;
+		b = (unsigned long) path[4] |
+		    (unsigned long) path[5] << 8 | (unsigned long) path[6] << 16 | (unsigned long) path[7] << 24;
+		c = (unsigned long) path[8] |
+		    (unsigned long) path[9] << 8 |
+		    (unsigned long) path[10] << 16 | (unsigned long) path[11] << 24;
 
 		d = pad;
 		for (i = 12; i < len; i++) {
 			d <<= 8;
-			d |= p[i];
+			d |= path[i];
 		}
 	} else if (len >= 8) {
-		a = (unsigned long) p[0] |
-		    (unsigned long) p[1] << 8 | (unsigned long) p[2] << 16 | (unsigned long) p[3] << 24;
-		b = (unsigned long) p[4] |
-		    (unsigned long) p[5] << 8 | (unsigned long) p[6] << 16 | (unsigned long) p[7] << 24;
+		a = (unsigned long) path[0] |
+		    (unsigned long) path[1] << 8 | (unsigned long) path[2] << 16 | (unsigned long) path[3] << 24;
+		b = (unsigned long) path[4] |
+		    (unsigned long) path[5] << 8 | (unsigned long) path[6] << 16 | (unsigned long) path[7] << 24;
 
 		c = d = pad;
 		for (i = 8; i < len; i++) {
 			c <<= 8;
-			c |= p[i];
+			c |= path[i];
 		}
 	} else if (len >= 4) {
-		a = (unsigned long) p[0] |
-		    (unsigned long) p[1] << 8 | (unsigned long) p[2] << 16 | (unsigned long) p[3] << 24;
+		a = (unsigned long) path[0] |
+		    (unsigned long) path[1] << 8 | (unsigned long) path[2] << 16 | (unsigned long) path[3] << 24;
 
 		b = c = d = pad;
 		for (i = 4; i < len; i++) {
 			b <<= 8;
-			b |= p[i];
+			b |= path[i];
 		}
 	} else {
 		a = b = c = d = pad;
 		for (i = 0; i < len; i++) {
 			a <<= 8;
-			a |= p[i];
+			a |= path[i];
 		}
 	}
 
 	TEACORE(FULLROUNDS);
-
-  ifree(p_orig);
 
 	return h0 ^ h1;
 }
@@ -315,38 +318,34 @@ unsigned long hash_path_old(const char *path) {
                        +(uint32_t)(((const uint8_t *)(d))[0]) )
 #endif
 
-unsigned long hash_path(const char * path) {
-  /* bit of molding */
-  char *d_orig = strlast(path, '/');
-  char *data = d_orig; /* for later free()ing */
-  int len = strlen(data);
+unsigned long hash_path(char const * path) {
+  int len = strlen(path);
 
   uint32_t hash = len, tmp;
   int rem;
-  if (len <= 0 || data == NULL) {
-    ifree(d_orig);
+  if (len <= 0 || path == NULL) {
     return 0;
   }
   rem = len & 3;
   len >>= 2;
   for (;len > 0; len--) {
-    hash  += get16bits (data);
-    tmp    = (get16bits (data+2) << 11) ^ hash;
-    hash   = (hash << 16) ^ tmp;
-    data  += 2*sizeof (uint16_t);
-    hash  += hash >> 11;
+    hash += get16bits (path);
+    tmp   = (get16bits (path+2) << 11) ^ hash;
+    hash  = (hash << 16) ^ tmp;
+    path += 2*sizeof (uint16_t);
+    hash += hash >> 11;
   }
   switch (rem) {
-    case 3: hash += get16bits (data);
+    case 3: hash += get16bits (path);
             hash ^= hash << 16;
-            hash ^= data[sizeof (uint16_t)] << 18;
+            hash ^= path[sizeof (uint16_t)] << 18;
             hash += hash >> 11;
             break;
-    case 2: hash += get16bits (data);
+    case 2: hash += get16bits (path);
             hash ^= hash << 11;
             hash += hash >> 17;
             break;
-    case 1: hash += *data;
+    case 1: hash += *path;
             hash ^= hash << 10;
             hash += hash >> 1;
   }
@@ -356,8 +355,6 @@ unsigned long hash_path(const char * path) {
   hash += hash >> 17;
   hash ^= hash << 25;
   hash += hash >> 6;
-
-  ifree(d_orig);
 
   return hash;
 }

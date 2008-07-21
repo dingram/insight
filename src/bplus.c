@@ -1590,7 +1590,6 @@ int tree_write_sb (tsblock *super) {
   return tree_write(0, (tblock*)super);
 }
 
-
 /**
  * Apply a given user-defined function to all keys in the tree rooted at \a root. The function needs to take three arguments:
  *
@@ -1627,6 +1626,56 @@ int tree_map_keys(const fileptr root, int (*func)(const char *, const fileptr, v
       return -EIO;
     }
   } while (node.ptrs[0]);
+
+  return ret;
+}
+
+size_t tree_get_full_key_len(fileptr dataptr) {
+  tdata dnode;
+
+  if (tree_read(dataptr, (tblock*)&dnode)) {
+    PMSG(LOG_ERR, "Error reading block %lu", dataptr);
+    errno = EIO;
+    /* key length will never be zero - this is always an error */
+    return 0;
+  }
+  if (dnode.parent) {
+    return strlen(dnode.name) + 1 + tree_get_full_key_len(dnode.parent);
+  } else {
+    return strlen(dnode.name);
+  }
+}
+
+char *tree_get_full_key(fileptr dataptr) {
+  signed long key_len = tree_get_full_key_len(dataptr);
+  PMSG(LOG_ERR, "Full key length: %lu", key_len);
+  if (key_len==0) return NULL;
+  char *ret = calloc(key_len+1, sizeof(char));
+  tdata dnode;
+
+  do {
+    PMSG(LOG_ERR, "Reading block %lu", dataptr);
+    if (tree_read(dataptr, (tblock*)&dnode)) {
+      PMSG(LOG_ERR, "Error reading block %lu", dataptr);
+      errno = EIO;
+      return NULL;
+    }
+    size_t this_len = strlen(dnode.name);
+    PMSG(LOG_ERR, "Name length: %lu", this_len);
+    key_len -= this_len;
+    PMSG(LOG_ERR, "Key len now: %lu", key_len);
+    PMSG(LOG_ERR, "strncpy(%p, %p, %lu)", &ret[key_len], dnode.name, key_len);
+    strncpy(&ret[key_len], dnode.name, this_len); /* to avoid copying the terminating null */
+    PMSG(LOG_ERR, "strncpy(%p, %p, %lu) done", &ret[key_len], dnode.name, key_len);
+    PMSG(LOG_ERR, "dnode.parent: %lu", dnode.parent);
+    if (dnode.parent) {
+      ret[--key_len]=INSIGHT_SUBKEY_SEP_C;
+      PMSG(LOG_ERR, "ret[%lu] = '%c'", key_len, INSIGHT_SUBKEY_SEP_C);
+    }
+    dataptr = dnode.parent;
+  } while (dataptr);
+
+  PMSG(LOG_ERR, "Returning \"%s\"", ret);
 
   return ret;
 }

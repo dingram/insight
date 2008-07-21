@@ -6,4 +6,10 @@
  - Directory synonyms
  - OR with (say) branch 2 negated = (b1 OR (ALL_FILES AND NOT b2)
  - Lossless set intersect
+ - Seperate attribute tree for auto-applied attributes without limbo removal
+ - All inodes should be in inode tree until removed from file system... but keep limbo list
+ - Reduce strdup() calls
+ - Convert strsplit() to strsplitmap() wherever possible; and strsplitmap() to a set of macros()
+ - Try to communicate information wherever possible (e.g. reduce strlen() calls)
+ - Const-correctness; use type const * const var as appropriate, rather than const type * var
  - Fix memory leaks

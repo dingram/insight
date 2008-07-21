@@ -174,6 +174,10 @@ static int _qtree_contains(const qelem *root, const unsigned int type) {
 }
 
 static void _qtree_dump(const qelem *node, int indent) {
+#ifndef _DEBUG
+  (void)node;
+  (void)indent;
+#else
   char *spc=calloc(indent*2+1, sizeof(char));
   memset(spc, ' ', indent*2);
 
@@ -227,6 +231,7 @@ static void _qtree_dump(const qelem *node, int indent) {
       break;
   }
   ifree(spc);
+#endif
 }
 
 

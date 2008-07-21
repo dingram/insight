@@ -185,6 +185,12 @@ static int tag_ensure_create(const char *tag) {
 
       char *the_tag = strlast(curtag, INSIGHT_SUBKEY_SEP_C);
       initDataNode(&datan);
+      strncpy(datan.name, the_tag, TREEKEY_SIZE);
+      if (attrid == tree_get_root()) {
+        datan.parent = 0;
+      } else {
+        datan.parent = attrid;
+      }
       if (!tree_sub_insert(attrid, the_tag, (tblock*)&datan)) {
         PMSG(LOG_ERR, "Tree insertion failed");
         profile_stop();
@@ -244,7 +250,7 @@ static int attr_add(fileptr inode, fileptr attrid) {
   profile_init_start();
   DEBUG("attr_add(inode: %08lx, attrid: %lu)", inode, attrid);
   char s_hash[9];
-  sprintf(s_hash, "%08lX", inode);
+  hex_to_string(s_hash, inode);
 
   if (!attrid) {
     DEBUG("Cannot add null attribute");
@@ -378,7 +384,7 @@ static int attr_del(fileptr inode, fileptr attrid) {
   profile_init_start();
   DEBUG("attr_del(%08lx, %lu)", inode, attrid);
   char s_hash[9];
-  sprintf(s_hash, "%08lX", inode);
+  hex_to_string(s_hash, inode);
 
   if (!attrid) {
     DEBUG("Searching limbo");
@@ -598,7 +604,6 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
     return 0;
 
   } else if (validate_path(canon_path)) {
-    ifree(last);
 
     /* steal a default stat structure */
     memcpy(stbuf, &insight.mountstat, sizeof(struct stat));
@@ -615,6 +620,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
       if (!tmpp) {
         PMSG(LOG_ERR, "Failed to allocate temporary space for hash path");
         ifree(canon_path);
+        ifree(last);
         qtree_free(&q, 1);
         profile_stopf("path: %s", path);
         return -ENOMEM;
@@ -639,6 +645,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
         DEBUG("Tag \"%s\" not found\n", canon_path+1);
         qtree_free(&q, 1);
         ifree(canon_path);
+        ifree(last);
         profile_stopf("path: %s", path);
         return -ENOENT;
       }
@@ -647,6 +654,7 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
         PMSG(LOG_ERR, "IO error reading data block");
         qtree_free(&q, 1);
         ifree(canon_path);
+        ifree(last);
         profile_stopf("path: %s", path);
         return -EIO;
       }
@@ -666,7 +674,8 @@ static int insight_getattr(const char *path, struct stat *stbuf) {
       }
       stbuf->st_nlink = 1;
       /* provide probably unique inodes for directories */
-      stbuf->st_ino = hash_path(canon_path);
+      stbuf->st_ino = hash_path(last);
+      ifree(last);
     }
   } else {
     DEBUG("Path does not exist\n");
@@ -957,15 +966,6 @@ static int insight_mkdir(const char *path, mode_t mode) {
 
   DEBUG("About to insert \"%s\" into parent \"%s\"", newdir, parent_tag);
 
-  /*
-  initDataNode(&datan);
-  if (!tree_sub_insert(tree_root, newdir, (tblock*)&datan)) {
-    PMSG(LOG_ERR, "Tree insertion failed");
-    ifree(newtag);
-    return -ENOSPC;
-  }
-  */
-
   DEBUG("Creating tag \"%s\"", newtag);
   if (!tag_ensure_create(newtag)) {
     PMSG(LOG_ERR, "Tree insertion failed");
@@ -1252,7 +1252,7 @@ static int insight_symlink(const char *from, const char *to) {
   /* calculate an inode number for the path */
   DEBUG("Hashing \"%s\"...", to+1);
   hash = hash_path(to+1);
-  sprintf(s_hash, "%08lX", hash);
+  hex_to_string(s_hash, hash);
   DEBUG("Repos target therefore: %s -> %s", s_hash, from);
 
   finaldest = gen_repos_path(s_hash, 1);
@@ -1637,7 +1637,7 @@ static int insight_read(const char *path, char *buf, size_t size, off_t offset, 
   profile_init_start();
   char *canon_path = get_canonical_path(path);
 
-  DEBUG("Read on path \"%s\"", canon_path);
+  //DEBUG("Read on path \"%s\"", canon_path);
 
   char *last = strlast(canon_path, '/');
 
@@ -1683,7 +1683,7 @@ static int insight_write(const char *path, const char *buf, size_t size, off_t o
   profile_init_start();
   char *canon_path = get_canonical_path(path);
 
-  DEBUG("Write on path \"%s\"", canon_path);
+  //DEBUG("Write on path \"%s\"", canon_path);
 
   char *last = strlast(canon_path, '/');
 
@@ -1901,10 +1901,8 @@ static int insight_listxattr(const char *path, char *list, size_t size) {
       DEBUG("List attributes of real file: %s", fullname);
 #endif
     int res = listxattr(fullname, list, size);
-    if (res==-1) {
-      if (errno != ENOTSUP && errno != ERANGE) {
-        PMSG(LOG_ERR, "listxattr(\"%s\", ...) failed: %s\n", fullname, strerror(errno));
-      }
+    if (res==-1 && errno != ENOTSUP && errno != ERANGE) {
+      PMSG(LOG_ERR, "listxattr(\"%s\", ...) failed: %s\n", fullname, strerror(errno));
       ifree(fullname);
       ifree(canon_path);
       return -errno;
@@ -1915,11 +1913,53 @@ static int insight_listxattr(const char *path, char *list, size_t size) {
       else
         DEBUG("Total size of attribute names: %d", res);
 #endif
+      if (res<0) res=0;
       /* TODO: get list of attributes applied to file and their names */
       if (list && size>=(size_t)res) {
         strcpy(&list[res], "insight");
       }
       res += 8; /* "insight\0" */
+
+      char *last = strlast(canon_path, '/');
+      char s_hash[9];
+      hex_to_string(s_hash, hash_path(last));
+      DEBUG("Searching inode tree for inode %s", s_hash);
+      fileptr piblock = tree_sub_search(tree_get_iroot(), s_hash);
+
+      if (!piblock) {
+        PMSG(LOG_ERR, "Could not find inode in tree!");
+        ifree(last);
+        ifree(fullname);
+        ifree(canon_path);
+        return -EBADF;
+      }
+
+      DEBUG("Found block %d", piblock);
+
+      fileptr *inodes = NULL;
+      int i, count = inode_get_all(piblock, NULL, 0);
+      if (count==0) {
+        DEBUG("No attributes for inode");
+        ifree(last);
+        ifree(fullname);
+        ifree(canon_path);
+        return res;
+      } else if (count<0) {
+        DEBUG("Error!");
+        ifree(last);
+        ifree(fullname);
+        ifree(canon_path);
+        return count;
+      }
+
+      inodes = calloc(count, sizeof(fileptr));
+      inode_get_all(piblock, inodes, count);
+      for (i=0; i<count; i++) {
+        DEBUG("Attribute %08lx", inodes[i]);
+      }
+      ifree(inodes);
+
+      ifree(last);
       ifree(fullname);
       ifree(canon_path);
       DEBUG("\n");
@@ -2009,9 +2049,9 @@ static void *insight_init(void) {
 void insight_destroy(void *arg) {
   (void) arg;
   profile_init_start();
-	PMSG(LOG_ERR, "Cleaning up and exiting");
+	DEBUG("Cleaning up and exiting");
   tree_close();
-	FMSG(LOG_ERR, "Tree store closed");
+	DEBUG("Tree store closed");
   profile_stop();
 }
 
@@ -2325,6 +2365,8 @@ static int insight_check_repos() {
     profile_stop();
     return 2;
   }
+
+  insight.repository_len=strlen(insight.repository);
 
   profile_stop();
   return 0;
