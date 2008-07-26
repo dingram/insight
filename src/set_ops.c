@@ -111,6 +111,90 @@ inline void _doSwap(void *a, void *b, size_t elem_size) {
 
 
 /**
+ * Creates the union of two sorted inode arrays. The output array should be \a
+ * in1count + \a in2count unless the output size is already known. Optimised
+ * for dealing with inodes.
+ *
+ * @param set1      The first set to be unioned.
+ * @param set2      The second set to be unioned.
+ * @param out       The output array.
+ * @param in1count  The number of items in \a set1.
+ * @param in2count  The number of items in \a set2.
+ * @param outmax    The maximum number of items in \a out.
+ * @returns A negative error code, or the number of items written to the output
+ * array.
+ */
+int set_union_inode(fileptr *set1, fileptr *set2, fileptr *out, size_t in1count, size_t in2count, size_t outmax) {
+  DEBUG("set_union_inode(set1: %p, set2: %p, out: %p, in1count: %lu, in2count: %lu, outmax: %lu)", set1, set2, out, in1count, in2count, outmax, elem_size, cmp);
+  if (!set1 || !set2 || !out || (in1count && in2count && !outmax)) {
+    DEBUG("At least one argument was null or zero");
+    return -EINVAL;
+  }
+
+  if (!in1count && !in2count) {
+    DEBUG("No elements in both input arrays means no union possible");
+    return 0;
+  }
+
+  size_t s1=0, s2=0, oi=0, eq=0;
+  fileptr oldval=0;
+  while (s1<in1count && s2<in2count && oi<outmax) {
+    if (set1[s1] == set2[s2]) {
+      DEBUG("Equal");
+      if (!eq || set1[s1] != oldval) {
+        DEBUG("Copying set1[%u] to output[%u]", s1, oi);
+        /* make sure that the output array has distinct elements */
+        out[oi++] = set1[s1];
+        /* keep the old value so we can tell if there are repeated elements */
+        oldval = set2[s2];
+      }
+      s1++; s2++;
+      eq=1;
+    } else if (set1[s1] < set2[s2]) {
+      DEBUG("Copying set1[%u] to output[%u]", s1, oi);
+      oldval = set1[s1];
+      out[oi++] = set1[s1++];
+      eq=0;
+    } else if (set1[s1] > set2[s2]) {
+      DEBUG("Copying set2[%u] to output[%u]", s2, oi);
+      oldval = set2[s2];
+      out[oi++] = set2[s2++];
+      eq=0;
+    }
+  }
+  DEBUG("Copying from set1?");
+  while (s1<in1count && oi<outmax) {
+    DEBUG("Copying set1[%u] to output[%u]", s1, oi);
+    out[oi++] = set1[s1++];
+  }
+  DEBUG("Copying from set2?");
+  while (s2<in2count && oi<outmax) {
+    DEBUG("Copying set2[%u] to output[%u]", s2, oi);
+    out[oi++] = set2[s2++];
+  }
+  return oi;
+}
+
+/**
+ * Creates the union of two sorted string arrays. The output array should be \a
+ * in1count + \a in2count unless the output size is already known. Just calls
+ * set_union() internally.
+ *
+ * @param set1      The first set to be unioned.
+ * @param set2      The second set to be unioned.
+ * @param out       The output array.
+ * @param in1count  The number of items in \a set1.
+ * @param in2count  The number of items in \a set2.
+ * @param outmax    The maximum number of items in \a out.
+ * @returns A negative error code, or the number of items written to the output
+ * array.
+ */
+int set_union_string(char **set1, char **set2, char **out, size_t in1count, size_t in2count, size_t outmax) {
+  DEBUG("set_union_string(set1: %p, set2: %p, out: %p, in1count: %lu, in2count: %lu, outmax: %lu)", set1, set2, out, in1count, in2count, outmax, elem_size, cmp);
+  return set_union(set1, set2, out, in1count, in2count, outmax, sizeof(char*), pstrcmp);
+}
+
+/**
  * Creates the union of two sorted arrays. The output array should be \a
  * in1count + \a in2count unless the output size is already known.
  *
@@ -182,6 +266,55 @@ int set_union(void *set1, void *set2, void *out, size_t in1count, size_t in2coun
   while (s2<in2count && oi<outmax) {
     DEBUG("Copying set2[%u] to output[%u]", s2, oi);
     memcpy((out + oi++ * elem_size), (set2 + s2++ * elem_size), elem_size);
+  }
+  return oi;
+}
+
+/**
+ * Creates the intersection of two sorted inode arrays. The output array is
+ * guaranteed never to be larger than MIN(\a in1count, \a in2count). Optimised
+ * for inode arrays.
+ *
+ * @param set1      The first set to be used.
+ * @param set2      The second set to be used.
+ * @param out       The output array.
+ * @param in1count  The number of items in \a set1.
+ * @param in2count  The number of items in \a set2.
+ * @param outmax    The maximum number of items in \a out.
+ * @returns A negative error code, or the number of items written to the output
+ * array.
+ */
+int set_intersect_inode(fileptr *set1, fileptr *set2, fileptr *out, size_t in1count, size_t in2count, size_t outmax) {
+  if (!set1 || !set2 || !out || !outmax) {
+    DEBUG("At least one argument was null or zero");
+    return -EINVAL;
+  }
+
+  if (!in1count || !in2count) {
+    DEBUG("No elements in an input array means no intersection possible");
+    return 0;
+  }
+
+  size_t s1=0, s2=0, oi=0, eq=0;
+  fileptr oldval=0;
+  while (s1<in1count && s2<in2count && oi<outmax) {
+    if (set1[s1] == set2[s2]) {
+      DEBUG("Equal");
+      if (!eq || set1[s1] != oldval) {
+        /* make sure that the output array has distinct elements */
+        out[oi++] = set1[s1];
+        /* keep the old value so we can tell if there are repeated elements */
+        oldval = set2[s2];
+      }
+      s1++; s2++;
+      eq=1;
+    } else if (set1[s1] < set2[s2]) {
+      oldval = set1[s1];
+      eq=0;
+    } else if (set1[s1] > set2[s2]) {
+      oldval = set2[s2];
+      eq=0;
+    }
   }
   return oi;
 }
@@ -358,8 +491,6 @@ int set_uniq(void *set, size_t count, size_t elem_size, int (*cmp)(const void*, 
       q+=elem_size;
     }
   }
-  DUMPUINT(count);
-  DUMPUINT(p-set);
   if (count > (p-set)/elem_size)
     count = 1 + (p-set)/elem_size;
   return count;
