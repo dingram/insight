@@ -62,7 +62,7 @@ int strcount(const char *haystack, const char needle) {
  *
  * @param input The input string.
  * @param sep   The character to split by.
- * @returns The last component of the string, as split by \sep, or the entire
+ * @returns The last component of the string, as split by \a sep, or the entire
  * input string if \a sep is not found.
  */
 char *strlast(const char *input, const char sep) {

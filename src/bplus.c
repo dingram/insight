@@ -1987,11 +1987,9 @@ static int _rec_inode_func(const char *key, const fileptr ptr, void *data) {
  * block, a tree block, or the superblock (if zero).
  *
  * @param[in]  block  The first block index to read.
- * @param[out] inodes A pointer which will be filled with an array of inodes.
- * If NULL, then the function returns the space required.
- * @param[in]  max    Maximum number of inodes the array can contain.
- * @returns Zero on success, the number of inodes if \a inodes is NULL, or a
- * negative error code on failure.
+ * @param[out] count  The number of inodes in the array
+ * @returns An array of inodes that should be freed after use, or NULL if an
+ * error occurred.
  */
 fileptr *inode_get_all_recurse(fileptr block, int *count) {
   if (!block) {

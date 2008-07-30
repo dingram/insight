@@ -44,18 +44,19 @@
 //#define MSG(l, f, ...)  do { if (!insight.quiet) syslog(l, "%s: " f "\n", __FUNCTION__,## __VA_ARGS__) } while (0)
 #define INIT_LOG()      do { openlog("insight", LOG_PID, LOG_DAEMON); } while(0)
 #endif
+/** @endcond */
+
 #define MSG(l, f, ...)  insight_log(l, f,## __VA_ARGS__)
 
-/* if we need the LOG_* constants, they're here */
 #ifndef LOG_EMERG
-# define	LOG_EMERG	0	/* system is unusable */
-# define	LOG_ALERT	1	/* action must be taken immediately */
-# define	LOG_CRIT	2	/* critical conditions */
-# define	LOG_ERR		3	/* error conditions */
-# define	LOG_WARNING	4	/* warning conditions */
-# define	LOG_NOTICE	5	/* normal but significant condition */
-# define	LOG_INFO	6	/* informational */
-# define	LOG_DEBUG	7	/* debug-level messages */
+# define	LOG_EMERG	0	/**< system is unusable */
+# define	LOG_ALERT	1	/**< action must be taken immediately */
+# define	LOG_CRIT	2	/**< critical conditions */
+# define	LOG_ERR		3	/**< error conditions */
+# define	LOG_WARNING	4	/**< warning conditions */
+# define	LOG_NOTICE	5	/**< normal but significant condition */
+# define	LOG_INFO	6	/**< informational */
+# define	LOG_DEBUG	7	/**< debug-level messages */
 #endif
 
 void insight_log(int lvl, const char *fmt, ...);

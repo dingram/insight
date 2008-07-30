@@ -8,6 +8,7 @@
 #define LMSG(l, f, ...) MSG(l, "%s:%d: " f, __FILE__, __LINE__,## __VA_ARGS__)
 #define PMSG(l, f, ...) MSG(l, "%s:%d:%s: " f, __FILE__, __LINE__, __FUNCTION__,## __VA_ARGS__)
 
+/** @cond */
 #ifdef _DEBUG
 # define DEBUG(f, ...)  PMSG(LOG_DEBUG, f,## __VA_ARGS__)
 # define DEBUGMSG(x)    DEBUG("%s", x)
