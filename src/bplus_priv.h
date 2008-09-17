@@ -1,12 +1,7 @@
 #ifndef _BPLUS_PRIV_H
 #define _BPLUS_PRIV_H
 
-/** Enable caching functions */
-#define TREE_CACHE_ENABLED
-
-/** Enable disk statistics */
-#define TREE_STATS_ENABLED
-
+#include <config.h>
 
 /** @cond */
 #ifndef FALSE

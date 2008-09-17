@@ -127,6 +127,9 @@
 /* Define to 1 if `utime(file, NULL)' sets file's timestamp to the present. */
 #undef HAVE_UTIME_NULL
 
+/* Plugin directory */
+#undef INSIGHT_DEFAULT_PLUGIN_DIR
+
 /* Define to 1 if `lstat' dereferences a symlink specified with a trailing
    slash. */
 #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
@@ -158,8 +161,17 @@
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
 
+/* Enable tree cache */
+#undef TREE_CACHE_ENABLED
+
+/* Enable tree statistics */
+#undef TREE_STATS_ENABLED
+
 /* Version number of package */
 #undef VERSION
+
+/* Enable debug mode */
+#undef _DEBUG
 
 /* Define to empty if `const' does not conform to ANSI C. */
 #undef const

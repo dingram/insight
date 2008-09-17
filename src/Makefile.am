@@ -18,7 +18,6 @@ insight_SOURCES=insight.c \
                 bplus.h \
 								bplus_priv.h \
                 insight.h
-insight_CFLAGS= -D'INSIGHT_DEFAULT_PLUGIN_DIR="@libdir@/insight"' $(CFLAGS)
 
 lib_LTLIBRARIES = libinsight_autoowner-0.1.la\
 									libinsight_autogroup-0.1.la\

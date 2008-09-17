@@ -59,28 +59,75 @@ AC_ARG_ENABLE(debug,
 AC_MSG_RESULT($debugmode)
 
 if test x"$debugmode" = x"yes"; then
-  AC_SUBST([CFLAGS],["-D_DEBUG ${CFLAGS}"])
+  #AC_SUBST([CFLAGS],["-D_DEBUG ${CFLAGS}"])
+  AC_DEFINE(_DEBUG, 1, [Enable debug mode])
 fi
 
 
-## option: plugin directory
-#AC_MSG_CHECKING(for plugin directory)
-#
-#insightplugindir=`eval echo "${libdir}/insight"`
-#AC_ARG_WITH(plugin-dir,
-#              AC_HELP_STRING(
-#                             [--with-plugin-dir=DIR],
-#                             [Specify location of Insight plugins (@<:@default=LIBDIR/insight@:>@)]
-#                            ),
-#              insightplugindir="$withval"
-#             )
-#
-#AC_MSG_RESULT($insightplugindir)
-#
-#if ! test -z "$insightplugindir"; then
-#  AC_SUBST([INSIGHT_PLUGIN_DIR],[$insightplugindir])
-#  AC_DEFINE([INSIGHT_DEFAULT_PLUGIN_DIR],INSIGHT_PLUGIN_DIR,[Plugin directory])
-#fi
+# option: tree statistics
+AC_MSG_CHECKING(whether to output tree statistics)
+
+treestats=no
+AC_ARG_ENABLE(treestats,
+              AC_HELP_STRING(
+                             [--enable-tree-stats],
+                             [enable tree statistics output (@<:@default=no@:>@)]
+                            ),
+              treestats="$enableval"
+             )
+
+AC_MSG_RESULT($treestats)
+
+if test x"$treestats" = x"yes"; then
+  AC_DEFINE(TREE_STATS_ENABLED, 1, [Enable tree statistics])
+fi
+
+
+# option: tree cache
+AC_MSG_CHECKING(whether to enable tree cache)
+
+treecache=no
+AC_ARG_ENABLE(treecache,
+              AC_HELP_STRING(
+                             [--enable-tree-cache],
+                             [enable tree memory cache (HIGHLY RECOMMENDED) (@<:@default=yes@:>@)]
+                            ),
+              treecache="$enableval"
+             )
+
+AC_MSG_RESULT($treecache)
+
+if test x"$treecache" = x"yes"; then
+  AC_DEFINE(TREE_CACHE_ENABLED, 1, [Enable tree cache])
+fi
+
+
+# option: plugin directory
+AC_MSG_CHECKING(for plugin directory)
+
+if test "$prefix" = "NONE"; then
+    prefix=$ac_default_prefix
+fi
+
+if test "$exec_prefix" = "NONE"; then
+    exec_prefix=$prefix
+fi
+
+INSIGHT_PLUGIN_DIR=`eval echo "${libdir}/insight"`
+
+AC_ARG_WITH(plugin-dir,
+              AC_HELP_STRING(
+                             [--with-plugin-dir=DIR],
+                             [Specify location of Insight plugins (@<:@default=LIBDIR/insight@:>@)]
+                            ),
+              INSIGHT_PLUGIN_DIR="$withval"
+             )
+
+AC_MSG_RESULT($INSIGHT_PLUGIN_DIR)
+
+if ! test -z "$INSIGHT_PLUGIN_DIR"; then
+  AC_DEFINE_UNQUOTED(INSIGHT_DEFAULT_PLUGIN_DIR, "${INSIGHT_PLUGIN_DIR}", [Plugin directory])
+fi
 
 
 
@@ -94,9 +141,11 @@ AC_CHECK_LIB([fuse],[fuse_main],,[
   exit 1
 ])
 
+PKG_CHECK_MODULES([CHECK], [check >= 0.9.4]);
+
 # output files
 AC_CONFIG_HEADERS([config.h])
-AC_CONFIG_FILES([Doxyfile Makefile src/Makefile])
+AC_CONFIG_FILES([Doxyfile Makefile src/Makefile test/Makefile])
 
 # do it
 AC_OUTPUT
