@@ -55,10 +55,10 @@ void print_set_int(const int *set, size_t count, size_t alloc_count) {
 #define INTERSECT_TEST_abc_sz(type, sa, sb, sc) TEST_abc_sz(intersect, type, sa, sb, sc)
 #define INTERSECT_TEST_abc(type) INTERSECT_TEST_abc_sz(type, array_size(a), array_size(b), array_size(c))
 
-#define DIFF_TEST_abc_sz(type, sa, sb, sc) TEST_abc_sz(intersect, type, sa, sb, sc)
+#define DIFF_TEST_abc_sz(type, sa, sb, sc) TEST_abc_sz(diff, type, sa, sb, sc)
 #define DIFF_TEST_abc(type) DIFF_TEST_abc_sz(type, array_size(a), array_size(b), array_size(c))
 
-#define UNIQ_TEST_abc_sz(type, sa, sb, sc) TEST_abc_sz(intersect, type, sa, sb, sc)
+#define UNIQ_TEST_abc_sz(type, sa, sb, sc) TEST_abc_sz(uniq, type, sa, sb, sc)
 #define UNIQ_TEST_abc(type) UNIQ_TEST_abc_sz(type, array_size(a), array_size(b), array_size(c))
 
 #define PRE_TEST(type) do {\
@@ -157,6 +157,18 @@ void print_set_int(const int *set, size_t count, size_t alloc_count) {
   PRE_TEST(type);\
   int r = DIFF_TEST_abc(type);\
   POST_TEST(format);\
+} while (0)
+
+#define DIFF_NOOP_TEST(type, format) do {\
+  PRE_NOOP_TEST(type);\
+  int r = DIFF_TEST_abc(type);\
+  POST_NOOP_TEST(format);\
+} while (0)
+
+#define DIFF_ERROR_TEST(type, format, err_code) do {\
+  PRE_NOOP_TEST(type);\
+  int r = DIFF_TEST_abc(type);\
+  POST_ERROR_TEST(format, err_code);\
 } while (0)
 
 
@@ -629,8 +641,224 @@ Suite *setops_intersect_suite (void) {
 /* ************************************************************************ */
 
 
+/*
+START_TEST(test_setops_diff_abc_empty_int)
+{
+  int a[1] = { 1 };
+  int b[1] = { 2 };
+  int c[2] = { 0 };
+  PRE_NOOP_TEST(int);
+  int r = DIFF_TEST_abc_sz(int, 0, 0, 0);
+  POST_ERROR_TEST("%d", EINVAL);
+}
+END_TEST
+
+START_TEST(test_setops_diff_ab_empty_int)
+{
+  int a[1] = { 1 };
+  int b[1] = { 2 };
+  int c[2] = { 0 };
+  PRE_NOOP_TEST(int);
+  int r = DIFF_TEST_abc_sz(int, 0, 0, array_size(c));
+  POST_NOOP_TEST("%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_ac_empty_int)
+{
+  int a[1] = { 1 };
+  int b[1] = { 2 };
+  int c[2] = { 0 };
+  PRE_NOOP_TEST(int);
+  int r = DIFF_TEST_abc_sz(int, 0, array_size(b), 0);
+  POST_ERROR_TEST("%d", EINVAL);
+}
+END_TEST
+
+START_TEST(test_setops_diff_bc_empty_int)
+{
+  int a[1] = { 1 };
+  int b[1] = { 2 };
+  int c[2] = { 0 };
+  PRE_NOOP_TEST(int);
+  int r = DIFF_TEST_abc_sz(int, array_size(a), 0, 0);
+  POST_ERROR_TEST("%d", EINVAL);
+}
+END_TEST
+
+START_TEST(test_setops_diff_a_empty_int)
+{
+  int a[1] = { 1 };
+  int b[1] = { 2 };
+  int c[2] = { 0 };
+  PRE_NOOP_TEST(int);
+  int r = DIFF_TEST_abc_sz(int, 0, array_size(b), array_size(c));
+  POST_NOOP_TEST("%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_b_empty_int)
+{
+  int a[1] = { 1 };
+  int b[1] = { 2 };
+  int c[2] = { 0 };
+  PRE_NOOP_TEST(int);
+  int r = DIFF_TEST_abc_sz(int, array_size(a), 0, array_size(c));
+  POST_NOOP_TEST("%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_c_empty_int)
+{
+  int a[1] = { 1 };
+  int b[1] = { 2 };
+  int c[2] = { 0 };
+  PRE_NOOP_TEST(int);
+  int r = DIFF_TEST_abc_sz(int, array_size(a), array_size(b), 0);
+  POST_ERROR_TEST("%d", EINVAL);
+}
+END_TEST
+
+START_TEST(test_setops_diff_two_single_int)
+{
+  int a[1] = { 1 };
+  int b[1] = { 2 };
+  int c[2] = { 0 };
+  DIFF_NOOP_TEST(int, "%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_two_single_int2)
+{
+  int a[1] = { 2 };
+  int b[1] = { 1 };
+  int c[2] = { 0 };
+  DIFF_NOOP_TEST(int, "%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_two_equal_int)
+{
+  int a[1] = { 1 };
+  int b[1] = { 1 };
+  int c[2] = { 0 };
+  int xc[1] = { 1 };
+  DIFF_TEST(int, "%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_many_equal_int)
+{
+  int a[5] = { 1, 2, 3, 4, 5 };
+  int b[5] = { 1, 3, 5, 7, 9 };
+  int c[5] = { 0 };
+  int xc[3] = { 1, 3, 5 };
+  DIFF_TEST(int, "%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_large_sets_int)
+{
+  int a[7] = { 1, 2, 3, 4, 6, 7, 8 };
+  int b[7] = { 1, 3, 5, 6, 8, 9, 10 };
+  int c[7] = { 0 };
+  int xc[4] = { 1, 3, 6, 8 };
+  DIFF_TEST(int, "%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_large_unique_sets_int)
+{
+  int a[7] = { 1, 3, 5, 7,  9, 11, 13 };
+  int b[7] = { 2, 4, 6, 8, 10, 12, 14 };
+  int c[7] = { 0 };
+  DIFF_NOOP_TEST(int, "%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_all_identical_int)
+{
+  int a[5] = { 1, 2, 3, 4, 5 };
+  int b[5] = { 1, 2, 3, 4, 5 };
+  int c[5] = { 0 };
+  int xc[5] = { 1, 2, 3, 4, 5 };
+  DIFF_TEST(int, "%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_first_identical_int)
+{
+  int a[5] = { 1, 2, 4, 6, 8 };
+  int b[5] = { 1, 3, 5, 7, 9 };
+  int c[5] = { 0 };
+  int xc[1] = { 1 };
+  DIFF_TEST(int, "%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_first2_identical_int)
+{
+  int a[5] = { 1, 2, 3, 5, 7 };
+  int b[5] = { 1, 2, 4, 6, 8 };
+  int c[5] = { 0 };
+  int xc[2] = { 1, 2 };
+  DIFF_TEST(int, "%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_last_identical_int)
+{
+  int a[5] = { 1, 3, 5, 7, 9 };
+  int b[5] = { 2, 4, 6, 8, 9 };
+  int c[5] = { 0 };
+  int xc[1] = { 9 };
+  DIFF_TEST(int, "%d");
+}
+END_TEST
+
+START_TEST(test_setops_diff_last2_identical_int)
+{
+  int a[5] = { 1, 3, 5, 7, 8 };
+  int b[5] = { 2, 4, 6, 7, 8 };
+  int c[5] = { 0 };
+  int xc[2] = { 7, 8 };
+  DIFF_TEST(int, "%d");
+}
+END_TEST
+*/
+
+
 Suite *setops_diff_suite (void) {
   Suite *s = suite_create("set_ops diff");
+
+  /*
+  TCase *tc_empty = tcase_create("Empty sets");
+  tcase_add_test(tc_empty, test_setops_diff_abc_empty_int);
+  tcase_add_test(tc_empty, test_setops_diff_ab_empty_int);
+  tcase_add_test(tc_empty, test_setops_diff_ac_empty_int);
+  tcase_add_test(tc_empty, test_setops_diff_bc_empty_int);
+  tcase_add_test(tc_empty, test_setops_diff_a_empty_int);
+  tcase_add_test(tc_empty, test_setops_diff_b_empty_int);
+  tcase_add_test(tc_empty, test_setops_diff_c_empty_int);
+  suite_add_tcase(s, tc_empty);
+
+  TCase *tc_simple = tcase_create("Simple tests");
+  tcase_add_test(tc_simple, test_setops_diff_two_single_int);
+  tcase_add_test(tc_simple, test_setops_diff_two_single_int2);
+  tcase_add_test(tc_simple, test_setops_diff_two_equal_int);
+  tcase_add_test(tc_simple, test_setops_diff_many_equal_int);
+  tcase_add_test(tc_simple, test_setops_diff_large_sets_int);
+  tcase_add_test(tc_simple, test_setops_diff_large_unique_sets_int);
+  suite_add_tcase(s, tc_simple);
+
+  TCase *tc_edge = tcase_create("Edge cases");
+  tcase_add_test(tc_edge, test_setops_diff_all_identical_int);
+  tcase_add_test(tc_edge, test_setops_diff_first_identical_int);
+  tcase_add_test(tc_edge, test_setops_diff_first2_identical_int);
+  tcase_add_test(tc_edge, test_setops_diff_last_identical_int);
+  tcase_add_test(tc_edge, test_setops_diff_last2_identical_int);
+  suite_add_tcase(s, tc_edge);
+  */
 
   return s;
 }
@@ -641,6 +869,35 @@ Suite *setops_diff_suite (void) {
 
 Suite *setops_uniq_suite (void) {
   Suite *s = suite_create("set_ops uniq");
+
+  /*
+  TCase *tc_empty = tcase_create("Empty sets");
+  tcase_add_test(tc_empty, test_setops_uniq_abc_empty_int);
+  tcase_add_test(tc_empty, test_setops_uniq_ab_empty_int);
+  tcase_add_test(tc_empty, test_setops_uniq_ac_empty_int);
+  tcase_add_test(tc_empty, test_setops_uniq_bc_empty_int);
+  tcase_add_test(tc_empty, test_setops_uniq_a_empty_int);
+  tcase_add_test(tc_empty, test_setops_uniq_b_empty_int);
+  tcase_add_test(tc_empty, test_setops_uniq_c_empty_int);
+  suite_add_tcase(s, tc_empty);
+
+  TCase *tc_simple = tcase_create("Simple tests");
+  tcase_add_test(tc_simple, test_setops_uniq_two_single_int);
+  tcase_add_test(tc_simple, test_setops_uniq_two_single_int2);
+  tcase_add_test(tc_simple, test_setops_uniq_two_equal_int);
+  tcase_add_test(tc_simple, test_setops_uniq_many_equal_int);
+  tcase_add_test(tc_simple, test_setops_uniq_large_sets_int);
+  tcase_add_test(tc_simple, test_setops_uniq_large_unique_sets_int);
+  suite_add_tcase(s, tc_simple);
+
+  TCase *tc_edge = tcase_create("Edge cases");
+  tcase_add_test(tc_edge, test_setops_uniq_all_identical_int);
+  tcase_add_test(tc_edge, test_setops_uniq_first_identical_int);
+  tcase_add_test(tc_edge, test_setops_uniq_first2_identical_int);
+  tcase_add_test(tc_edge, test_setops_uniq_last_identical_int);
+  tcase_add_test(tc_edge, test_setops_uniq_last2_identical_int);
+  suite_add_tcase(s, tc_edge);
+  */
 
   return s;
 }

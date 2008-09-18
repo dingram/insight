@@ -20,15 +20,25 @@ void bplus_core_new_setup(void) {
   fail_if(stat(TEST_TREE_FILENAME, &s)!=-1 || errno!=ENOENT, "Unlinking tree failed: %s", strerror(errno));
 }
 
-void bplus_core_new_teardown(void) {
+void bplus_core_existing_setup(void) {
   struct stat s;
   if (stat(TEST_TREE_FILENAME, &s)!=-1 || errno != ENOENT) {
     unlink(TEST_TREE_FILENAME);
-  } else {
-    fprintf(stderr, "Could not find tree to remove\n");
   }
-  if(stat(TEST_TREE_FILENAME, &s)!=-1 || errno!=ENOENT) {
-    fprintf(stderr, "Unlinking tree failed: %s\n", strerror(errno));
+  fail_if(stat(TEST_TREE_FILENAME, &s)!=-1 || errno!=ENOENT, "Unlinking tree failed: %s", strerror(errno));
+  // create sample tree
+  int ret = tree_open(TEST_TREE_FILENAME);
+  fail_if(ret, "Creating tree failed");
+  tree_close();
+}
+
+void bplus_teardown(void) {
+  struct stat s;
+  if (stat(TEST_TREE_FILENAME, &s)!=-1 || errno != ENOENT) {
+    unlink(TEST_TREE_FILENAME);
+    if(stat(TEST_TREE_FILENAME, &s)!=-1 || errno!=ENOENT) {
+      fprintf(stderr, "Unlinking tree failed: %s\n", strerror(errno));
+    }
   }
 }
 
@@ -124,7 +134,7 @@ Suite * bplus_core_suite (void) {
   Suite *s = suite_create("bplus core");
 
   TCase *tc_core_new = tcase_create("Core (new)");
-  tcase_add_checked_fixture(tc_core_new, bplus_core_new_setup, bplus_core_new_teardown);
+  tcase_add_checked_fixture(tc_core_new, bplus_core_new_setup, bplus_teardown);
   tcase_add_test(tc_core_new, test_bplus_core_new_open);
   tcase_add_test(tc_core_new, test_bplus_core_new_check_sb);
   tcase_add_test(tc_core_new, test_bplus_core_new_check_root);
@@ -133,7 +143,7 @@ Suite * bplus_core_suite (void) {
   suite_add_tcase(s, tc_core_new);
 
   TCase *tc_core_existing = tcase_create("Core (existing)");
-  //tcase_add_checked_fixture(tc_core, bplus_core_existing_setup, bplus_core_existing_teardown);
+  tcase_add_checked_fixture(tc_core_new, bplus_core_existing_setup, bplus_teardown);
   tcase_add_test(tc_core_existing, test_bplus_core_existing_open);
   suite_add_tcase(s, tc_core_existing);
 
