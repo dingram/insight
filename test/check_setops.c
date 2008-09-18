@@ -44,23 +44,65 @@ void print_set_int(const int *set, size_t count, size_t alloc_count) {
   PRINT_SET(set, count, alloc_count, "%d");
 }
 
-#define UNION_TEST_abc(type) set_union(a, b, c, sizeof(a)/sizeof(type), sizeof(b)/sizeof(type), sizeof(c)/sizeof(type), sizeof(type), p##type##cmp)
+#define array_size(arr) (sizeof(arr)/sizeof(arr[0]))
 
-#define UNION_TEST(type, format) do {\
+#define TEST_abc_sz(test, type, sa, sb, sc) set_##test (a, b, c, sa, sb, sc, sizeof(type), p##type##cmp)
+
+#define UNION_TEST_abc_sz(type, sa, sb, sc) TEST_abc_sz(union, type, sa, sb, sc)
+#define UNION_TEST_abc(type) UNION_TEST_abc_sz(type, array_size(a), array_size(b), array_size(c))
+
+#define INTERSECT_TEST_abc_sz(type, sa, sb, sc) TEST_abc_sz(intersect, type, sa, sb, sc)
+#define INTERSECT_TEST_abc(type) INTERSECT_TEST_abc_sz(type, array_size(a), array_size(b), array_size(c))
+
+#define DIFF_TEST_abc_sz(type, sa, sb, sc) TEST_abc_sz(intersect, type, sa, sb, sc)
+#define DIFF_TEST_abc(type) DIFF_TEST_abc_sz(type, array_size(a), array_size(b), array_size(c))
+
+#define UNIQ_TEST_abc_sz(type, sa, sb, sc) TEST_abc_sz(intersect, type, sa, sb, sc)
+#define UNIQ_TEST_abc(type) UNIQ_TEST_abc_sz(type, array_size(a), array_size(b), array_size(c))
+
+#define PRE_TEST(type) do {\
+  type ia[array_size(a)];\
+  type ib[array_size(b)];\
   size_t i;\
-  type ia[(sizeof(a)/sizeof(type))];\
-  for (i=0; i<(sizeof(a)/sizeof(a[0])); i++) ia[i]=a[i];\
-  type ib[(sizeof(a)/sizeof(type))];\
-  for (i=0; i<(sizeof(b)/sizeof(b[0])); i++) ib[i]=b[i];\
-  int r = UNION_TEST_abc(type);\
-  for (i=0; i<(sizeof(a)/sizeof(a[0])); i++)\
+  do {\
+    for (i=0; i<array_size(a); i++) ia[i]=a[i];\
+    for (i=0; i<array_size(b); i++) ib[i]=b[i];\
+} while (0)
+
+#define POST_TEST(format) do {\
+  for (i=0; i<array_size(a); i++)\
     fail_if(a[i]!=ia[i], "Should not modify input; a[%d]=" format ", should be " format, i, a[i], ia[i]);\
-  for (i=0; i<(sizeof(b)/sizeof(b[0])); i++)\
+  for (i=0; i<array_size(b); i++)\
     fail_if(b[i]!=ib[i], "Should not modify input; b[%d]=" format ", should be " format, i, b[i], ib[i]);\
   fail_if(r<0, "Internal error: %d", -r);\
-  fail_if(r!=(sizeof(xc)/sizeof(xc[0])), "Should output %d items, actually returned %d", (sizeof(xc)/sizeof(xc[0])), r);\
-  for (i=0; i<(sizeof(xc)/sizeof(xc[0])); i++)\
+  fail_if(r!=array_size(xc), "Should output %d items, actually returned %d", array_size(xc), r);\
+  for (i=0; i<array_size(xc); i++)\
     fail_if(c[i]!=xc[i], "Incorrect output: c[%d]=" format ", should be " format, i, c[i], xc[i]);\
+} while (0);\
+} while (0)
+
+#define UNION_TEST(type, format) do {\
+  PRE_TEST(type);\
+  int r = UNION_TEST_abc(type);\
+  POST_TEST(format);\
+} while (0)
+
+#define INTERSECT_TEST(type, format) do {\
+  PRE_TEST(type);\
+  int r = INTERSECT_TEST_abc(type);\
+  POST_TEST(format);\
+} while (0)
+
+#define DIFF_TEST(type, format) do {\
+  PRE_TEST(type);\
+  int r = DIFF_TEST_abc(type);\
+  POST_TEST(format);\
+} while (0)
+
+#define UNIQ_TEST(type, format) do {\
+  PRE_TEST(type);\
+  int r = UNIQ_TEST_abc(type);\
+  POST_TEST(format);\
 } while (0)
 
 
@@ -69,7 +111,7 @@ START_TEST(test_setops_union_abc_empty_int)
   int a[1] = { 1 };
   int b[1] = { 2 };
   int c[2] = { 0 };
-  int r = set_union(a, b, c, 0, 0, 0, sizeof(int), pintcmp);
+  int r = UNION_TEST_abc_sz(int, 0, 0, 0);
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
   fail_if(c[0]!=0, "Should not modify output");
@@ -84,7 +126,7 @@ START_TEST(test_setops_union_ab_empty_int)
   int a[1] = { 1 };
   int b[1] = { 2 };
   int c[2] = { 0 };
-  int r = set_union(a, b, c, 0, 0, sizeof(c)/sizeof(c[0]), sizeof(int), pintcmp);
+  int r = UNION_TEST_abc_sz(int, 0, 0, array_size(c));
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
   fail_if(c[0]!=0, "Should not modify output");
@@ -99,7 +141,7 @@ START_TEST(test_setops_union_ac_empty_int)
   int a[1] = { 1 };
   int b[1] = { 2 };
   int c[2] = { 0 };
-  int r = set_union(a, b, c, 0, sizeof(b)/sizeof(b[0]), 0, sizeof(int), pintcmp);
+  int r = UNION_TEST_abc_sz(int, 0, array_size(b), 0);
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
   fail_if(c[0]!=0, "Should not modify output");
@@ -114,7 +156,7 @@ START_TEST(test_setops_union_bc_empty_int)
   int a[1] = { 1 };
   int b[1] = { 2 };
   int c[2] = { 0 };
-  int r = set_union(a, b, c, sizeof(a)/sizeof(a[0]), 0, 0, sizeof(int), pintcmp);
+  int r = UNION_TEST_abc_sz(int, array_size(a), 0, 0);
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
   fail_if(c[0]!=0, "Should not modify output");
@@ -129,7 +171,7 @@ START_TEST(test_setops_union_a_empty_int)
   int a[1] = { 1 };
   int b[1] = { 2 };
   int c[2] = { 0 };
-  int r = set_union(a, b, c, 0, sizeof(b)/sizeof(b[0]), sizeof(c)/sizeof(c[0]), sizeof(int), pintcmp);
+  int r = UNION_TEST_abc_sz(int, 0, array_size(b), array_size(c));
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
   fail_if(r<0, "Internal error: %d", -r);
@@ -144,7 +186,7 @@ START_TEST(test_setops_union_b_empty_int)
   int a[1] = { 1 };
   int b[1] = { 2 };
   int c[2] = { 0 };
-  int r = set_union(a, b, c, sizeof(a)/sizeof(a[0]), 0, sizeof(c)/sizeof(c[0]), sizeof(int), pintcmp);
+  int r = UNION_TEST_abc_sz(int, array_size(a), 0, array_size(c));
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
   fail_if(r<0, "Internal error: %d", -r);
@@ -159,7 +201,7 @@ START_TEST(test_setops_union_c_empty_int)
   int a[1] = { 1 };
   int b[1] = { 2 };
   int c[2] = { 0 };
-  int r = set_union(a, b, c, sizeof(a)/sizeof(a[0]), sizeof(b)/sizeof(b[0]), 0, sizeof(int), pintcmp);
+  int r = UNION_TEST_abc_sz(int, array_size(a), array_size(b), 0);
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
   fail_if(c[0]!=0, "Should not modify output");
