@@ -1613,7 +1613,7 @@ int tree_map_keys(const fileptr root, int (*func)(const char *, const fileptr, v
     return -EIO;
   }
 
-  do {
+  while (1) {
     for (i=0; i<node.keycount; i++) {
       ret = func(node.keys[i], node.ptrs[i+1], data);
       if (ret) {
@@ -1621,11 +1621,13 @@ int tree_map_keys(const fileptr root, int (*func)(const char *, const fileptr, v
         break;
       }
     }
-    if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
+    if (!node.ptrs[0]) {
+      break;
+    } else if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
       PMSG(LOG_ERR, "I/O error reading block\n");
       return -EIO;
     }
-  } while (node.ptrs[0]);
+  }
 
   return ret;
 }

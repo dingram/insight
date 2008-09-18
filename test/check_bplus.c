@@ -32,6 +32,20 @@ void bplus_core_existing_setup(void) {
   tree_close();
 }
 
+void bplus_core_open_setup(void) {
+  struct stat s;
+  if (stat(TEST_TREE_FILENAME, &s)!=-1 || errno != ENOENT) {
+    unlink(TEST_TREE_FILENAME);
+  }
+  fail_if(stat(TEST_TREE_FILENAME, &s)!=-1 || errno!=ENOENT, "Unlinking tree failed: %s", strerror(errno));
+  // create sample tree
+  int ret = tree_open(TEST_TREE_FILENAME);
+  fail_if(ret, "Creating tree failed");
+}
+
+void bplus_null_teardown(void) {
+}
+
 void bplus_teardown(void) {
   struct stat s;
   if (stat(TEST_TREE_FILENAME, &s)!=-1 || errno != ENOENT) {
@@ -47,6 +61,16 @@ START_TEST (test_bplus_core_new_open)
 {
   int ret = tree_open(TEST_TREE_FILENAME);
   fail_if(ret, "Creating tree failed");
+  tree_close();
+}
+END_TEST
+
+START_TEST (test_bplus_core_new_open2)
+{
+  int ret = tree_open(TEST_TREE_FILENAME);
+  fail_if(ret, "Creating tree failed");
+  ret = tree_open(TEST_TREE_FILENAME);
+  fail_unless(ret==EMFILE, "Opening tree again; didn't get expcted EMFILE error: %s", strerror(ret));
   tree_close();
 }
 END_TEST
@@ -129,6 +153,204 @@ START_TEST (test_bplus_core_existing_open)
 }
 END_TEST
 
+START_TEST (test_bplus_core_existing_open2)
+{
+  int ret = tree_open(TEST_TREE_FILENAME);
+  fail_if(ret, "Opening tree failed");
+  ret = tree_open(TEST_TREE_FILENAME);
+  fail_unless(ret==EMFILE, "Opening tree again; didn't get expcted EMFILE error: %s", strerror(ret));
+  tree_close();
+}
+END_TEST
+
+START_TEST (test_bplus_core_existing_check_default_sb)
+{
+  int ret = tree_open(TEST_TREE_FILENAME);
+  fail_if(ret, "Opening tree failed");
+
+  struct stat st;
+  fail_if(stat(TEST_TREE_FILENAME, &st)==-1, "Could not stat tree file \"%s\": %s", TEST_TREE_FILENAME, strerror(errno));
+
+  tsblock s;
+  tree_read_sb(&s);
+  fail_unless(s.magic == MAGIC_SUPERBLOCK, "Superblock magic wrong: %08x instead of %08x", s.magic,       MAGIC_SUPERBLOCK);
+  fail_unless(s.root_index  == 1,          "Root index wrong: %lu instead of %lu",         s.root_index,  1);
+  fail_unless(s.free_head   == 3,          "Free head index wrong: %lu instead of %lu",    s.free_head,   3);
+  fail_unless(s.inode_limbo == 0,          "Inode limbo index wrong: %lu instead of %lu",  s.inode_limbo, 0);
+  fail_unless(s.limbo_count == 0,          "Inode limbo count wrong: %lu instead of %lu",  s.limbo_count, 0);
+  fail_unless(s.inode_root  == 2,          "Inode root index wrong: %lu instead of %lu",   s.inode_root,  2);
+  fail_if    (s.max_size    == 0,          "Maximum size is wrong (zero)"                                  );
+  fail_unless((1 + s.max_size) * TREEBLOCK_SIZE == st.st_size,
+      "Max size (%lu blocks, %lu bytes) != filesize (%lu bytes)", (1 + s.max_size), (1 + s.max_size) * TREEBLOCK_SIZE, st.st_size);
+
+  tree_close();
+}
+END_TEST
+
+int _output_keys(const char *key, const fileptr ignore, void *d) {
+  printf("%s\n", key, ignore);
+  return 0;
+}
+
+START_TEST(test_bplus_ins_simple_ins)
+{
+  tdata datan;
+  char sid[TREEKEY_SIZE] = { 0 };
+  snprintf(sid, TREEKEY_SIZE, "k%03d", 0);
+  initDataNode(&datan);
+  strncpy(datan.name, sid, TREEKEY_SIZE);
+  datan.parent = 0;
+  int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+  fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
+  tree_map_keys(tree_get_root(), _output_keys, NULL);
+  printf("\n");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_simple_ins10)
+{
+  tdata datan;
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<10; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
+  }
+  tree_map_keys(tree_get_root(), _output_keys, NULL);
+  printf("\n");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_simple_ins12)
+{
+  tdata datan;
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<12; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
+  }
+  tree_map_keys(tree_get_root(), _output_keys, NULL);
+  printf("\n");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_simple_ins13)
+{
+  tdata datan;
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<13; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
+  }
+  tree_map_keys(tree_get_root(), _output_keys, NULL);
+  printf("\n");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_simple_ins14)
+{
+  tdata datan;
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<14; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
+  }
+  tree_map_keys(tree_get_root(), _output_keys, NULL);
+  printf("\n");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_simple_ins15)
+{
+  tdata datan;
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<15; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
+  }
+  tree_map_keys(tree_get_root(), _output_keys, NULL);
+  printf("\n");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_simple_ins25)
+{
+  tdata datan;
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<25; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
+  }
+  tree_map_keys(tree_get_root(), _output_keys, NULL);
+  printf("\n");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_simple_ins50)
+{
+  tdata datan;
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<50; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
+  }
+  tree_map_keys(tree_get_root(), _output_keys, NULL);
+  printf("\n");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_simple_ins175)
+{
+  tdata datan;
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<175; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
+  }
+  tree_map_keys(tree_get_root(), _output_keys, NULL);
+  printf("\n");
+}
+END_TEST
+
 
 Suite * bplus_core_suite (void) {
   Suite *s = suite_create("bplus core");
@@ -136,6 +358,7 @@ Suite * bplus_core_suite (void) {
   TCase *tc_core_new = tcase_create("Core (new)");
   tcase_add_checked_fixture(tc_core_new, bplus_core_new_setup, bplus_teardown);
   tcase_add_test(tc_core_new, test_bplus_core_new_open);
+  tcase_add_test(tc_core_new, test_bplus_core_new_open2);
   tcase_add_test(tc_core_new, test_bplus_core_new_check_sb);
   tcase_add_test(tc_core_new, test_bplus_core_new_check_root);
   tcase_add_test(tc_core_new, test_bplus_core_new_check_free_head);
@@ -145,6 +368,8 @@ Suite * bplus_core_suite (void) {
   TCase *tc_core_existing = tcase_create("Core (existing)");
   tcase_add_checked_fixture(tc_core_new, bplus_core_existing_setup, bplus_teardown);
   tcase_add_test(tc_core_existing, test_bplus_core_existing_open);
+  tcase_add_test(tc_core_existing, test_bplus_core_existing_open2);
+  tcase_add_test(tc_core_existing, test_bplus_core_existing_check_default_sb);
   suite_add_tcase(s, tc_core_existing);
 
   return s;
@@ -152,6 +377,19 @@ Suite * bplus_core_suite (void) {
 
 Suite *bplus_insert_suite (void) {
   Suite *s = suite_create("bplus insertion");
+
+  TCase *tc_ins_simple = tcase_create("Simple insertion (new)");
+  tcase_add_checked_fixture(tc_ins_simple, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins10);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins12);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins13);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins14);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins15);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins25);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins50);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins175);
+  suite_add_tcase(s, tc_ins_simple);
 
   return s;
 }
