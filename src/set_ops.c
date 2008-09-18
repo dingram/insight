@@ -125,7 +125,7 @@ inline void _doSwap(void *a, void *b, size_t elem_size) {
  * array.
  */
 int set_union_inode(fileptr *set1, fileptr *set2, fileptr *out, size_t in1count, size_t in2count, size_t outmax) {
-  DEBUG("set_union_inode(set1: %p, set2: %p, out: %p, in1count: %lu, in2count: %lu, outmax: %lu)", set1, set2, out, in1count, in2count, outmax, elem_size, cmp);
+  DEBUG("set_union_inode(set1: %p, set2: %p, out: %p, in1count: %lu, in2count: %lu, outmax: %lu)", set1, set2, out, in1count, in2count, outmax);
   if (!set1 || !set2 || !out || (in1count && in2count && !outmax)) {
     DEBUG("At least one argument was null or zero");
     return -EINVAL;
@@ -190,7 +190,7 @@ int set_union_inode(fileptr *set1, fileptr *set2, fileptr *out, size_t in1count,
  * array.
  */
 int set_union_string(char **set1, char **set2, char **out, size_t in1count, size_t in2count, size_t outmax) {
-  DEBUG("set_union_string(set1: %p, set2: %p, out: %p, in1count: %lu, in2count: %lu, outmax: %lu)", set1, set2, out, in1count, in2count, outmax, elem_size, cmp);
+  DEBUG("set_union_string(set1: %p, set2: %p, out: %p, in1count: %lu, in2count: %lu, outmax: %lu)", set1, set2, out, in1count, in2count, outmax);
   return set_union(set1, set2, out, in1count, in2count, outmax, sizeof(char*), pstrcmp);
 }
 
