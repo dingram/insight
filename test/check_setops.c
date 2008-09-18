@@ -46,11 +46,29 @@ void print_set_int(const int *set, size_t count, size_t alloc_count) {
 
 #define UNION_TEST_abc(type) set_union(a, b, c, sizeof(a)/sizeof(type), sizeof(b)/sizeof(type), sizeof(c)/sizeof(type), sizeof(type), p##type##cmp)
 
+#define UNION_TEST(type, format) do {\
+  size_t i;\
+  type ia[(sizeof(a)/sizeof(type))];\
+  for (i=0; i<(sizeof(a)/sizeof(a[0])); i++) ia[i]=a[i];\
+  type ib[(sizeof(a)/sizeof(type))];\
+  for (i=0; i<(sizeof(b)/sizeof(b[0])); i++) ib[i]=b[i];\
+  int r = UNION_TEST_abc(type);\
+  for (i=0; i<(sizeof(a)/sizeof(a[0])); i++)\
+    fail_if(a[i]!=ia[i], "Should not modify input; a[%d]=" format ", should be " format, i, a[i], ia[i]);\
+  for (i=0; i<(sizeof(b)/sizeof(b[0])); i++)\
+    fail_if(b[i]!=ib[i], "Should not modify input; b[%d]=" format ", should be " format, i, b[i], ib[i]);\
+  fail_if(r<0, "Internal error: %d", -r);\
+  fail_if(r!=(sizeof(xc)/sizeof(xc[0])), "Should output %d items, actually returned %d", (sizeof(xc)/sizeof(xc[0])), r);\
+  for (i=0; i<(sizeof(xc)/sizeof(xc[0])); i++)\
+    fail_if(c[i]!=xc[i], "Incorrect output: c[%d]=" format ", should be " format, i, c[i], xc[i]);\
+} while (0)
+
+
 START_TEST(test_setops_union_abc_empty_int)
 {
   int a[1] = { 1 };
   int b[1] = { 2 };
-  int c[2] = { 0, 0 };
+  int c[2] = { 0 };
   int r = set_union(a, b, c, 0, 0, 0, sizeof(int), pintcmp);
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
@@ -65,7 +83,7 @@ START_TEST(test_setops_union_ab_empty_int)
 {
   int a[1] = { 1 };
   int b[1] = { 2 };
-  int c[2] = { 0, 0 };
+  int c[2] = { 0 };
   int r = set_union(a, b, c, 0, 0, sizeof(c)/sizeof(c[0]), sizeof(int), pintcmp);
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
@@ -80,7 +98,7 @@ START_TEST(test_setops_union_ac_empty_int)
 {
   int a[1] = { 1 };
   int b[1] = { 2 };
-  int c[2] = { 0, 0 };
+  int c[2] = { 0 };
   int r = set_union(a, b, c, 0, sizeof(b)/sizeof(b[0]), 0, sizeof(int), pintcmp);
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
@@ -95,7 +113,7 @@ START_TEST(test_setops_union_bc_empty_int)
 {
   int a[1] = { 1 };
   int b[1] = { 2 };
-  int c[2] = { 0, 0 };
+  int c[2] = { 0 };
   int r = set_union(a, b, c, sizeof(a)/sizeof(a[0]), 0, 0, sizeof(int), pintcmp);
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
@@ -110,7 +128,7 @@ START_TEST(test_setops_union_a_empty_int)
 {
   int a[1] = { 1 };
   int b[1] = { 2 };
-  int c[2] = { 0, 0 };
+  int c[2] = { 0 };
   int r = set_union(a, b, c, 0, sizeof(b)/sizeof(b[0]), sizeof(c)/sizeof(c[0]), sizeof(int), pintcmp);
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
@@ -125,7 +143,7 @@ START_TEST(test_setops_union_b_empty_int)
 {
   int a[1] = { 1 };
   int b[1] = { 2 };
-  int c[2] = { 0, 0 };
+  int c[2] = { 0 };
   int r = set_union(a, b, c, sizeof(a)/sizeof(a[0]), 0, sizeof(c)/sizeof(c[0]), sizeof(int), pintcmp);
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
@@ -140,7 +158,7 @@ START_TEST(test_setops_union_c_empty_int)
 {
   int a[1] = { 1 };
   int b[1] = { 2 };
-  int c[2] = { 0, 0 };
+  int c[2] = { 0 };
   int r = set_union(a, b, c, sizeof(a)/sizeof(a[0]), sizeof(b)/sizeof(b[0]), 0, sizeof(int), pintcmp);
   fail_if(a[0]!=1, "Should not modify input");
   fail_if(b[0]!=2, "Should not modify input");
@@ -154,14 +172,9 @@ START_TEST(test_setops_union_two_single_int)
 {
   int a[1] = { 1 };
   int b[1] = { 2 };
-  int c[2] = { 0, 0 };
-  int r = UNION_TEST_abc(int);
-  fail_if(a[0]!=1, "Should not modify input");
-  fail_if(b[0]!=2, "Should not modify input");
-  fail_if(r<0, "Internal error: %d", -r);
-  fail_if(r!=2, "Should output 2 items, actually returned %d", r);
-  fail_if(c[0]!=1, "Incorrect output: c[0]=%d, should be 1", c[0]);
-  fail_if(c[1]!=2, "Incorrect output: c[1]=%d, should be 2", c[1]);
+  int c[2] = { 0 };
+  int xc[2] = { 1, 2 };
+  UNION_TEST(int, "%d");
 }
 END_TEST
 
@@ -169,14 +182,9 @@ START_TEST(test_setops_union_two_single_int2)
 {
   int a[1] = { 2 };
   int b[1] = { 1 };
-  int c[2] = { 0, 0 };
-  int r = UNION_TEST_abc(int);
-  fail_if(a[0]!=2, "Should not modify input");
-  fail_if(b[0]!=1, "Should not modify input");
-  fail_if(r<0, "Internal error: %d", -r);
-  fail_if(r!=2, "Should output 2 items, actually returned %d", r);
-  fail_if(c[0]!=1, "Incorrect output: c[0]=%d, should be 1", c[0]);
-  fail_if(c[1]!=2, "Incorrect output: c[1]=%d, should be 2", c[1]);
+  int c[2] = { 0 };
+  int xc[2] = { 1, 2 };
+  UNION_TEST(int, "%d");
 }
 END_TEST
 
@@ -184,14 +192,9 @@ START_TEST(test_setops_union_two_equal_int)
 {
   int a[1] = { 1 };
   int b[1] = { 1 };
-  int c[2] = { 0, 0 };
-  int r = UNION_TEST_abc(int);
-  fail_if(a[0]!=1, "Should not modify input");
-  fail_if(b[0]!=1, "Should not modify input");
-  fail_if(r<0, "Internal error: %d", -r);
-  fail_if(r!=1, "Should output 1 item, actually returned %d", r);
-  fail_if(c[0]!=1, "Incorrect output: c[0]=%d, should be 1", c[0]);
-  fail_if(c[1]!=1, "Incorrect output: c[1]=%d, should be 1", c[1]);
+  int c[2] = { 0 };
+  int xc[1] = { 1 };
+  UNION_TEST(int, "%d");
 }
 END_TEST
 
@@ -199,27 +202,9 @@ START_TEST(test_setops_union_many_equal_int)
 {
   int a[5] = { 1, 2, 3, 4, 5 };
   int b[5] = { 1, 3, 5, 7, 9 };
-  int c[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-  int r = UNION_TEST_abc(int);
-  fail_if(a[0]!=1, "Should not modify input");
-  fail_if(a[1]!=2, "Should not modify input");
-  fail_if(a[2]!=3, "Should not modify input");
-  fail_if(a[3]!=4, "Should not modify input");
-  fail_if(a[4]!=5, "Should not modify input");
-  fail_if(b[0]!=1, "Should not modify input");
-  fail_if(b[1]!=3, "Should not modify input");
-  fail_if(b[2]!=5, "Should not modify input");
-  fail_if(b[3]!=7, "Should not modify input");
-  fail_if(b[4]!=9, "Should not modify input");
-  fail_if(r<0, "Internal error: %d", -r);
-  fail_if(r!=7, "Should output 7 items, actually returned %d", r);
-  fail_if(c[0]!=1, "Incorrect output: c[0]=%d, should be 1", c[0]);
-  fail_if(c[1]!=2, "Incorrect output: c[1]=%d, should be 2", c[1]);
-  fail_if(c[2]!=3, "Incorrect output: c[2]=%d, should be 3", c[2]);
-  fail_if(c[3]!=4, "Incorrect output: c[3]=%d, should be 4", c[3]);
-  fail_if(c[4]!=5, "Incorrect output: c[4]=%d, should be 5", c[4]);
-  fail_if(c[5]!=7, "Incorrect output: c[5]=%d, should be 7", c[5]);
-  fail_if(c[6]!=9, "Incorrect output: c[6]=%d, should be 9", c[6]);
+  int c[10] = { 0 };
+  int xc[7] = { 1, 2, 3, 4, 5, 7, 9 };
+  UNION_TEST(int, "%d");
 }
 END_TEST
 
@@ -227,34 +212,9 @@ START_TEST(test_setops_union_large_sets_int)
 {
   int a[7] = { 1, 2, 3, 4, 6, 7, 8 };
   int b[7] = { 1, 3, 5, 6, 8, 9, 10 };
-  int c[14] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-  int r = UNION_TEST_abc(int);
-  fail_if(a[0]!= 1, "Should not modify input");
-  fail_if(a[1]!= 2, "Should not modify input");
-  fail_if(a[2]!= 3, "Should not modify input");
-  fail_if(a[3]!= 4, "Should not modify input");
-  fail_if(a[4]!= 6, "Should not modify input");
-  fail_if(a[5]!= 7, "Should not modify input");
-  fail_if(a[6]!= 8, "Should not modify input");
-  fail_if(b[0]!= 1, "Should not modify input");
-  fail_if(b[1]!= 3, "Should not modify input");
-  fail_if(b[2]!= 5, "Should not modify input");
-  fail_if(b[3]!= 6, "Should not modify input");
-  fail_if(b[4]!= 8, "Should not modify input");
-  fail_if(b[5]!= 9, "Should not modify input");
-  fail_if(b[6]!=10, "Should not modify input");
-  fail_if(r<0, "Internal error: %d", -r);
-  fail_if(r!=10, "Should output 10 items, actually returned %d", r);
-  fail_if(c[0]!= 1, "Incorrect output: c[0]=%d, should be 1", c[0]);
-  fail_if(c[1]!= 2, "Incorrect output: c[1]=%d, should be 2", c[1]);
-  fail_if(c[2]!= 3, "Incorrect output: c[2]=%d, should be 3", c[2]);
-  fail_if(c[3]!= 4, "Incorrect output: c[3]=%d, should be 4", c[3]);
-  fail_if(c[4]!= 5, "Incorrect output: c[4]=%d, should be 5", c[4]);
-  fail_if(c[5]!= 6, "Incorrect output: c[5]=%d, should be 6", c[5]);
-  fail_if(c[6]!= 7, "Incorrect output: c[6]=%d, should be 7", c[6]);
-  fail_if(c[7]!= 8, "Incorrect output: c[7]=%d, should be 8", c[7]);
-  fail_if(c[8]!= 9, "Incorrect output: c[8]=%d, should be 9", c[8]);
-  fail_if(c[9]!=10, "Incorrect output: c[9]=%d, should be 10", c[9]);
+  int c[14] = { 0 };
+  int xc[10] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+  UNION_TEST(int, "%d");
 }
 END_TEST
 
@@ -262,38 +222,9 @@ START_TEST(test_setops_union_large_unique_sets_int)
 {
   int a[7] = { 1, 3, 5, 7,  9, 11, 13 };
   int b[7] = { 2, 4, 6, 8, 10, 12, 14 };
-  int c[14] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-  int r = UNION_TEST_abc(int);
-  fail_if(a[0]!= 1, "Should not modify input");
-  fail_if(a[1]!= 3, "Should not modify input");
-  fail_if(a[2]!= 5, "Should not modify input");
-  fail_if(a[3]!= 7, "Should not modify input");
-  fail_if(a[4]!= 9, "Should not modify input");
-  fail_if(a[5]!=11, "Should not modify input");
-  fail_if(a[6]!=13, "Should not modify input");
-  fail_if(b[0]!= 2, "Should not modify input");
-  fail_if(b[1]!= 4, "Should not modify input");
-  fail_if(b[2]!= 6, "Should not modify input");
-  fail_if(b[3]!= 8, "Should not modify input");
-  fail_if(b[4]!=10, "Should not modify input");
-  fail_if(b[5]!=12, "Should not modify input");
-  fail_if(b[6]!=14, "Should not modify input");
-  fail_if(r<0, "Internal error: %d", -r);
-  fail_if(r!=14, "Should output 14 items, actually returned %d", r);
-  fail_if(c[ 0]!= 1, "Incorrect output: c[0]=%d, should be 1",  c[ 0]);
-  fail_if(c[ 1]!= 2, "Incorrect output: c[1]=%d, should be 2",  c[ 1]);
-  fail_if(c[ 2]!= 3, "Incorrect output: c[2]=%d, should be 3",  c[ 2]);
-  fail_if(c[ 3]!= 4, "Incorrect output: c[3]=%d, should be 4",  c[ 3]);
-  fail_if(c[ 4]!= 5, "Incorrect output: c[4]=%d, should be 5",  c[ 4]);
-  fail_if(c[ 5]!= 6, "Incorrect output: c[5]=%d, should be 6",  c[ 5]);
-  fail_if(c[ 6]!= 7, "Incorrect output: c[6]=%d, should be 7",  c[ 6]);
-  fail_if(c[ 7]!= 8, "Incorrect output: c[7]=%d, should be 8",  c[ 7]);
-  fail_if(c[ 8]!= 9, "Incorrect output: c[8]=%d, should be 9",  c[ 8]);
-  fail_if(c[ 9]!=10, "Incorrect output: c[9]=%d, should be 10", c[ 9]);
-  fail_if(c[10]!=11, "Incorrect output: c[10]=%d, should be 11", c[10]);
-  fail_if(c[11]!=12, "Incorrect output: c[11]=%d, should be 12", c[11]);
-  fail_if(c[12]!=13, "Incorrect output: c[12]=%d, should be 13", c[12]);
-  fail_if(c[13]!=14, "Incorrect output: c[13]=%d, should be 14", c[13]);
+  int c[14] = { 0 };
+  int xc[14] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
+  UNION_TEST(int, "%d");
 }
 END_TEST
 
@@ -301,25 +232,9 @@ START_TEST(test_setops_union_all_identical_int)
 {
   int a[5] = { 1, 2, 3, 4, 5 };
   int b[5] = { 1, 2, 3, 4, 5 };
-  int c[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-  int r = UNION_TEST_abc(int);
-  fail_if(a[0]!=1, "Should not modify input");
-  fail_if(a[1]!=2, "Should not modify input");
-  fail_if(a[2]!=3, "Should not modify input");
-  fail_if(a[3]!=4, "Should not modify input");
-  fail_if(a[4]!=5, "Should not modify input");
-  fail_if(b[0]!=1, "Should not modify input");
-  fail_if(b[1]!=2, "Should not modify input");
-  fail_if(b[2]!=3, "Should not modify input");
-  fail_if(b[3]!=4, "Should not modify input");
-  fail_if(b[4]!=5, "Should not modify input");
-  fail_if(r<0, "Internal error: %d", -r);
-  fail_if(r!=5, "Should output 5 items, actually returned %d", r);
-  fail_if(c[0]!=1, "Incorrect output: c[0]=%d, should be 1", c[0]);
-  fail_if(c[1]!=2, "Incorrect output: c[1]=%d, should be 2", c[1]);
-  fail_if(c[2]!=3, "Incorrect output: c[2]=%d, should be 3", c[2]);
-  fail_if(c[3]!=4, "Incorrect output: c[3]=%d, should be 4", c[3]);
-  fail_if(c[4]!=5, "Incorrect output: c[4]=%d, should be 5", c[4]);
+  int c[10] = { 0 };
+  int xc[5] = { 1, 2, 3, 4, 5 };
+  UNION_TEST(int, "%d");
 }
 END_TEST
 
@@ -327,29 +242,9 @@ START_TEST(test_setops_union_first_identical_int)
 {
   int a[5] = { 1, 2, 4, 6, 8 };
   int b[5] = { 1, 3, 5, 7, 9 };
-  int c[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-  int r = UNION_TEST_abc(int);
-  fail_if(a[0]!=1, "Should not modify input");
-  fail_if(a[1]!=2, "Should not modify input");
-  fail_if(a[2]!=4, "Should not modify input");
-  fail_if(a[3]!=6, "Should not modify input");
-  fail_if(a[4]!=8, "Should not modify input");
-  fail_if(b[0]!=1, "Should not modify input");
-  fail_if(b[1]!=3, "Should not modify input");
-  fail_if(b[2]!=5, "Should not modify input");
-  fail_if(b[3]!=7, "Should not modify input");
-  fail_if(b[4]!=9, "Should not modify input");
-  fail_if(r<0, "Internal error: %d", -r);
-  fail_if(r!=9, "Should output 9 items, actually returned %d", r);
-  fail_if(c[0]!=1, "Incorrect output: c[0]=%d, should be 1", c[0]);
-  fail_if(c[1]!=2, "Incorrect output: c[1]=%d, should be 2", c[1]);
-  fail_if(c[2]!=3, "Incorrect output: c[2]=%d, should be 3", c[2]);
-  fail_if(c[3]!=4, "Incorrect output: c[3]=%d, should be 4", c[3]);
-  fail_if(c[4]!=5, "Incorrect output: c[4]=%d, should be 5", c[4]);
-  fail_if(c[5]!=6, "Incorrect output: c[5]=%d, should be 6", c[5]);
-  fail_if(c[6]!=7, "Incorrect output: c[6]=%d, should be 7", c[6]);
-  fail_if(c[7]!=8, "Incorrect output: c[7]=%d, should be 8", c[7]);
-  fail_if(c[8]!=9, "Incorrect output: c[8]=%d, should be 9", c[8]);
+  int c[10] = { 0 };
+  int xc[9] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  UNION_TEST(int, "%d");
 }
 END_TEST
 
@@ -357,28 +252,9 @@ START_TEST(test_setops_union_first2_identical_int)
 {
   int a[5] = { 1, 2, 3, 5, 7 };
   int b[5] = { 1, 2, 4, 6, 8 };
-  int c[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-  int r = UNION_TEST_abc(int);
-  fail_if(a[0]!=1, "Should not modify input");
-  fail_if(a[1]!=2, "Should not modify input");
-  fail_if(a[2]!=3, "Should not modify input");
-  fail_if(a[3]!=5, "Should not modify input");
-  fail_if(a[4]!=7, "Should not modify input");
-  fail_if(b[0]!=1, "Should not modify input");
-  fail_if(b[1]!=2, "Should not modify input");
-  fail_if(b[2]!=4, "Should not modify input");
-  fail_if(b[3]!=6, "Should not modify input");
-  fail_if(b[4]!=8, "Should not modify input");
-  fail_if(r<0, "Internal error: %d", -r);
-  fail_if(r!=8, "Should output 8 items, actually returned %d", r);
-  fail_if(c[0]!=1, "Incorrect output: c[0]=%d, should be 1", c[0]);
-  fail_if(c[1]!=2, "Incorrect output: c[1]=%d, should be 2", c[1]);
-  fail_if(c[2]!=3, "Incorrect output: c[2]=%d, should be 3", c[2]);
-  fail_if(c[3]!=4, "Incorrect output: c[3]=%d, should be 4", c[3]);
-  fail_if(c[4]!=5, "Incorrect output: c[4]=%d, should be 5", c[4]);
-  fail_if(c[5]!=6, "Incorrect output: c[5]=%d, should be 6", c[5]);
-  fail_if(c[6]!=7, "Incorrect output: c[6]=%d, should be 7", c[6]);
-  fail_if(c[7]!=8, "Incorrect output: c[7]=%d, should be 8", c[7]);
+  int c[10] = { 0 };
+  int xc[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+  UNION_TEST(int, "%d");
 }
 END_TEST
 
@@ -386,29 +262,9 @@ START_TEST(test_setops_union_last_identical_int)
 {
   int a[5] = { 1, 3, 5, 7, 9 };
   int b[5] = { 2, 4, 6, 8, 9 };
-  int c[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-  int r = UNION_TEST_abc(int);
-  fail_if(a[0]!=1, "Should not modify input");
-  fail_if(a[1]!=3, "Should not modify input");
-  fail_if(a[2]!=5, "Should not modify input");
-  fail_if(a[3]!=7, "Should not modify input");
-  fail_if(a[4]!=9, "Should not modify input");
-  fail_if(b[0]!=2, "Should not modify input");
-  fail_if(b[1]!=4, "Should not modify input");
-  fail_if(b[2]!=6, "Should not modify input");
-  fail_if(b[3]!=8, "Should not modify input");
-  fail_if(b[4]!=9, "Should not modify input");
-  fail_if(r<0, "Internal error: %d", -r);
-  fail_if(r!=9, "Should output 9 items, actually returned %d", r);
-  fail_if(c[0]!=1, "Incorrect output: c[0]=%d, should be 1", c[0]);
-  fail_if(c[1]!=2, "Incorrect output: c[1]=%d, should be 2", c[1]);
-  fail_if(c[2]!=3, "Incorrect output: c[2]=%d, should be 3", c[2]);
-  fail_if(c[3]!=4, "Incorrect output: c[3]=%d, should be 4", c[3]);
-  fail_if(c[4]!=5, "Incorrect output: c[4]=%d, should be 5", c[4]);
-  fail_if(c[5]!=6, "Incorrect output: c[5]=%d, should be 6", c[5]);
-  fail_if(c[6]!=7, "Incorrect output: c[6]=%d, should be 7", c[6]);
-  fail_if(c[7]!=8, "Incorrect output: c[7]=%d, should be 8", c[7]);
-  fail_if(c[8]!=9, "Incorrect output: c[8]=%d, should be 9", c[8]);
+  int c[10] = { 0 };
+  int xc[9] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  UNION_TEST(int, "%d");
 }
 END_TEST
 
@@ -416,28 +272,9 @@ START_TEST(test_setops_union_last2_identical_int)
 {
   int a[5] = { 1, 3, 5, 7, 8 };
   int b[5] = { 2, 4, 6, 7, 8 };
-  int c[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-  int r = UNION_TEST_abc(int);
-  fail_if(a[0]!=1, "Should not modify input");
-  fail_if(a[1]!=3, "Should not modify input");
-  fail_if(a[2]!=5, "Should not modify input");
-  fail_if(a[3]!=7, "Should not modify input");
-  fail_if(a[4]!=8, "Should not modify input");
-  fail_if(b[0]!=2, "Should not modify input");
-  fail_if(b[1]!=4, "Should not modify input");
-  fail_if(b[2]!=6, "Should not modify input");
-  fail_if(b[3]!=7, "Should not modify input");
-  fail_if(b[4]!=8, "Should not modify input");
-  fail_if(r<0, "Internal error: %d", -r);
-  fail_if(r!=8, "Should output 8 items, actually returned %d", r);
-  fail_if(c[0]!=1, "Incorrect output: c[0]=%d, should be 1", c[0]);
-  fail_if(c[1]!=2, "Incorrect output: c[1]=%d, should be 2", c[1]);
-  fail_if(c[2]!=3, "Incorrect output: c[2]=%d, should be 3", c[2]);
-  fail_if(c[3]!=4, "Incorrect output: c[3]=%d, should be 4", c[3]);
-  fail_if(c[4]!=5, "Incorrect output: c[4]=%d, should be 5", c[4]);
-  fail_if(c[5]!=6, "Incorrect output: c[5]=%d, should be 6", c[5]);
-  fail_if(c[6]!=7, "Incorrect output: c[6]=%d, should be 7", c[6]);
-  fail_if(c[7]!=8, "Incorrect output: c[7]=%d, should be 8", c[7]);
+  int c[10] = { 0 };
+  int xc[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+  UNION_TEST(int, "%d");
 }
 END_TEST
 
