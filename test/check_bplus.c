@@ -188,7 +188,9 @@ START_TEST (test_bplus_core_existing_check_default_sb)
 END_TEST
 
 int _output_keys(const char *key, const fileptr ignore, void *d) {
-  printf("%s\n", key, ignore);
+  (void)ignore;
+  (void)d;
+  //printf("%s\n", key);
   return 0;
 }
 
@@ -203,7 +205,7 @@ START_TEST(test_bplus_ins_simple_ins)
   int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
   fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
   tree_map_keys(tree_get_root(), _output_keys, NULL);
-  printf("\n");
+  //printf("\n");
 }
 END_TEST
 
@@ -221,7 +223,7 @@ START_TEST(test_bplus_ins_simple_ins10)
     fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
   }
   tree_map_keys(tree_get_root(), _output_keys, NULL);
-  printf("\n");
+  //printf("\n");
 }
 END_TEST
 
@@ -239,7 +241,7 @@ START_TEST(test_bplus_ins_simple_ins12)
     fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
   }
   tree_map_keys(tree_get_root(), _output_keys, NULL);
-  printf("\n");
+  //printf("\n");
 }
 END_TEST
 
@@ -257,7 +259,7 @@ START_TEST(test_bplus_ins_simple_ins13)
     fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
   }
   tree_map_keys(tree_get_root(), _output_keys, NULL);
-  printf("\n");
+  //printf("\n");
 }
 END_TEST
 
@@ -275,7 +277,7 @@ START_TEST(test_bplus_ins_simple_ins14)
     fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
   }
   tree_map_keys(tree_get_root(), _output_keys, NULL);
-  printf("\n");
+  //printf("\n");
 }
 END_TEST
 
@@ -293,7 +295,7 @@ START_TEST(test_bplus_ins_simple_ins15)
     fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
   }
   tree_map_keys(tree_get_root(), _output_keys, NULL);
-  printf("\n");
+  //printf("\n");
 }
 END_TEST
 
@@ -311,7 +313,7 @@ START_TEST(test_bplus_ins_simple_ins25)
     fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
   }
   tree_map_keys(tree_get_root(), _output_keys, NULL);
-  printf("\n");
+  //printf("\n");
 }
 END_TEST
 
@@ -329,7 +331,7 @@ START_TEST(test_bplus_ins_simple_ins50)
     fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
   }
   tree_map_keys(tree_get_root(), _output_keys, NULL);
-  printf("\n");
+  //printf("\n");
 }
 END_TEST
 
@@ -347,7 +349,7 @@ START_TEST(test_bplus_ins_simple_ins175)
     fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
   }
   tree_map_keys(tree_get_root(), _output_keys, NULL);
-  printf("\n");
+  //printf("\n");
 }
 END_TEST
 
@@ -378,7 +380,7 @@ Suite * bplus_core_suite (void) {
 Suite *bplus_insert_suite (void) {
   Suite *s = suite_create("bplus insertion");
 
-  TCase *tc_ins_simple = tcase_create("Simple insertion (new)");
+  TCase *tc_ins_simple = tcase_create("Simple insertion");
   tcase_add_checked_fixture(tc_ins_simple, bplus_core_open_setup, bplus_teardown);
   tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins);
   tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins10);
@@ -391,8 +393,55 @@ Suite *bplus_insert_suite (void) {
   tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins175);
   suite_add_tcase(s, tc_ins_simple);
 
+#if 0
+  /* i.e. insert and then search for the key within the same loop */
+  TCase *tc_ins_check_immed = tcase_create("Insertion and immediate key check");
+  tcase_add_checked_fixture(tc_ins_check_immed, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins10);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins12);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins13);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins14);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins15);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins25);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins50);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins175);
+  suite_add_tcase(s, tc_ins_check_immed);
+
+  /* i.e. insert and then search for the key within a separate loop */
+  TCase *tc_ins_check_defer = tcase_create("Insertion and deferred key check");
+  tcase_add_checked_fixture(tc_ins_check_defer, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins10);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins12);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins13);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins14);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins15);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins25);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins50);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins175);
+  suite_add_tcase(s, tc_ins_check_defer);
+
+  /* i.e. insert and then check the array of keys matches what's expected */
+  TCase *tc_ins_check_map = tcase_create("Insertion and map_keys check");
+  tcase_add_checked_fixture(tc_ins_check_map, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins10);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins12);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins13);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins14);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins15);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins25);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins50);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins175);
+  suite_add_tcase(s, tc_ins_check_map);
+#endif
+
   return s;
 }
+
+// TODO: random-order insertion
+// TODO: reverse-order insertion
 
 int main (void) {
   int number_failed;
