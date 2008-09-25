@@ -1632,6 +1632,57 @@ int tree_map_keys(const fileptr root, int (*func)(const char *, const fileptr, v
   return ret;
 }
 
+/**
+ * Fetch all keys from the tree rooted at \a root as an array.
+ *
+ * @param[in]  root   The root of the tree to read.
+ * @param[out] keys   A pointer which will be filled with an array of strings.
+ * If NULL, then the function returns the number of items required (@see
+ * tree_sub_key_count()).
+ * @param[in]  max    Maximum number of keys the array can contain.
+ * @returns Zero on success, the number of keys if \a keys is NULL, or a
+ * negative error code on failure.
+ */
+int tree_get_all_keys(fileptr root, tkey *keys, unsigned int max) {
+
+  if (!keys) {
+    return tree_sub_key_count(root);
+  }
+
+  tnode node;
+  unsigned int i;
+  size_t cur=0;
+
+  if (tree_sub_get_min(root, &node)) {
+    PMSG(LOG_ERR, "tree_sub_get_min() failed\n");
+    return -EIO;
+  }
+
+  while (1) {
+    unsigned int i = 0;
+    while (i<node.keycount && cur<max) {
+      strncpy(keys[cur++], node.keys[i++], TREEKEY_SIZE);
+    }
+    if (!node.ptrs[0]) {
+      break;
+    } else if (cur>=max) {
+      PMSG(LOG_ERR, "Ran out of buffer space\n");
+      return -ENOSPC;
+    } else if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
+      PMSG(LOG_ERR, "I/O error reading block\n");
+      return -EIO;
+    }
+  }
+
+  return cur;
+}
+
+/**
+ * Get the length of the fully-qualified key for the given data block.
+ *
+ * @param fileptr dataptr The data block for which to retrieve the key length.
+ * @return The length of the fully-qualified key.
+ */
 size_t tree_get_full_key_len(fileptr dataptr) {
   tdata dnode;
 
@@ -1648,6 +1699,12 @@ size_t tree_get_full_key_len(fileptr dataptr) {
   }
 }
 
+/**
+ * Get the fully-qualified key for the given data block.
+ *
+ * @param fileptr dataptr The data block for which to retrieve the fully-qualified key.
+ * @return A pointer to the key that must be freed when no longer required.
+ */
 char *tree_get_full_key(fileptr dataptr) {
   signed long key_len = tree_get_full_key_len(dataptr);
   PMSG(LOG_ERR, "Full key length: %lu", key_len);
