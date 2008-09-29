@@ -577,7 +577,7 @@ inline void _insert_check_data_immed_n(const int n) {
     fail_unless(r, "Tree insertion of key %s failed with error number %d (%s)", sid, errno, strerror(errno));
     fileptr p = tree_sub_get(tree_get_root(), sid, (tblock*)&checkn);
     fail_if(p, "Tree get for key %s failed with error number %d (%s)", sid, -p, strerror(-p));
-    fail_if(memcmp(&datan, &checkn, sizeof(tdata)), "Data block verification for key \"%s\" failed", sid);
+    fail_if(memcmp(&datan, &checkn, sizeof(tdata)), "Data block verification for key %d (\"%s\") failed", i, sid);
   }
 }
 
@@ -661,16 +661,17 @@ inline void _insert_check_data_defer_n(const int n) {
     initDataNode(&datan[i]);
     strncpy(datan[i].name, sid, TREEKEY_SIZE);
     datan[i].parent = 0;
-    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan[i]);
     fail_unless(r, "Tree insertion of key %s failed with error number %d (%s)", sid, errno, strerror(errno));
   }
   for (i=0; i<n; i++) {
     tdata checkn;
+    snprintf(sid, TREEKEY_SIZE, "k%04d", i);
     fileptr p = tree_sub_get(tree_get_root(), sid, (tblock*)&checkn);
     fail_if(p, "Tree get for key %s failed with error number %d (%s)", sid, -p, strerror(-p));
     p = memcmp(&datan[i], &checkn, sizeof(tdata));
     if (p) DUMPDATA(&checkn);
-    fail_if(p, "Data block verification for key \"%s\" failed", sid);
+    fail_if(p, "Data block verification for key %d (\"%s\") failed", i, sid);
   }
 }
 
