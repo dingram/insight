@@ -2372,11 +2372,27 @@ static int insight_check_repos() {
   return 0;
 }
 
+#ifdef _DEBUG_USR1
+void sig_dump_tree()
+{
+  setbuf(stdout, NULL);
+  signal(SIGUSR1, sig_dump_tree);
+  fflush(stdout);
+  printf(">>> SIGUSR1 >>>--------: Received SIGUSR1; dumping tree ----------------------\n");
+  tree_dump_tree(0, 0);
+  printf("<<< SIGUSR1 <<<--------: Tree dump complete ----------------------------------\n");
+  fflush(stdout);
+}
+#endif
+
 int main(int argc, char *argv[]) {
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
   int res;
 
   insight.progname = argv[0];
+#ifdef _DEBUG_USR1
+  signal(SIGUSR1, sig_dump_tree);
+#endif
 
   if (fuse_opt_parse(&args, &insight, insight_opts, insight_opt_proc) == -1) {
     exit(1);
