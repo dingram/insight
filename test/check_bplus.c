@@ -12,6 +12,20 @@
 
 #define TEST_TREE_FILENAME "my-test-tree"
 
+static inline void DUMPDATA(tdata *node) {
+  unsigned int i;
+  printf(" [DATA NODE]\n");
+  printf("  inodecount:     %d\n", node->inodecount);
+  printf("  flags: %x\n", node->flags);
+  printf("  subkeys: %lu\n", node->subkeys);
+  printf("  inodes:");
+  for(i=0;i<DATA_INODE_MAX;i++) printf((i>=node->inodecount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->inodes[i]);
+  printf("\n");
+  printf("  name: %s\n", node->name);
+  printf("  parent: %lu\n", node->parent);
+  printf("  next_inodes: %lu\n", node->next_inodes);
+}
+
 void bplus_core_new_setup(void) {
   struct stat s;
   if (stat(TEST_TREE_FILENAME, &s)!=-1 || errno != ENOENT) {
@@ -190,166 +204,544 @@ END_TEST
 int _output_keys(const char *key, const fileptr ignore, void *d) {
   (void)ignore;
   (void)d;
+  (void)key;
   //printf("%s\n", key);
   return 0;
 }
 
-START_TEST(test_bplus_ins_simple_ins)
-{
+inline void _insert_n(const int n) {
   tdata datan;
   char sid[TREEKEY_SIZE] = { 0 };
-  snprintf(sid, TREEKEY_SIZE, "k%03d", 0);
-  initDataNode(&datan);
-  strncpy(datan.name, sid, TREEKEY_SIZE);
-  datan.parent = 0;
-  int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
-  fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
-  tree_map_keys(tree_get_root(), _output_keys, NULL);
-  //printf("\n");
+  int i;
+  for (i=0; i<n; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%04d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
+  }
+}
+
+START_TEST(test_bplus_ins_simple_ins)
+{
+  printf("Simple insertions ");
+  _insert_n(1);
+  printf(".");
 }
 END_TEST
 
 START_TEST(test_bplus_ins_simple_ins10)
 {
-  tdata datan;
-  char sid[TREEKEY_SIZE] = { 0 };
-  int i;
-  for (i=0; i<10; i++) {
-    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
-    initDataNode(&datan);
-    strncpy(datan.name, sid, TREEKEY_SIZE);
-    datan.parent = 0;
-    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
-    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
-  }
-  tree_map_keys(tree_get_root(), _output_keys, NULL);
-  //printf("\n");
+  _insert_n(10);
+  printf(".");
 }
 END_TEST
 
 START_TEST(test_bplus_ins_simple_ins12)
 {
-  tdata datan;
-  char sid[TREEKEY_SIZE] = { 0 };
-  int i;
-  for (i=0; i<12; i++) {
-    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
-    initDataNode(&datan);
-    strncpy(datan.name, sid, TREEKEY_SIZE);
-    datan.parent = 0;
-    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
-    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
-  }
-  tree_map_keys(tree_get_root(), _output_keys, NULL);
-  //printf("\n");
+  _insert_n(12);
+  printf(".");
 }
 END_TEST
 
 START_TEST(test_bplus_ins_simple_ins13)
 {
-  tdata datan;
-  char sid[TREEKEY_SIZE] = { 0 };
-  int i;
-  for (i=0; i<13; i++) {
-    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
-    initDataNode(&datan);
-    strncpy(datan.name, sid, TREEKEY_SIZE);
-    datan.parent = 0;
-    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
-    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
-  }
-  tree_map_keys(tree_get_root(), _output_keys, NULL);
-  //printf("\n");
+  _insert_n(13);
+  printf(".");
 }
 END_TEST
 
 START_TEST(test_bplus_ins_simple_ins14)
 {
-  tdata datan;
-  char sid[TREEKEY_SIZE] = { 0 };
-  int i;
-  for (i=0; i<14; i++) {
-    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
-    initDataNode(&datan);
-    strncpy(datan.name, sid, TREEKEY_SIZE);
-    datan.parent = 0;
-    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
-    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
-  }
-  tree_map_keys(tree_get_root(), _output_keys, NULL);
-  //printf("\n");
+  _insert_n(14);
+  printf(".");
 }
 END_TEST
 
 START_TEST(test_bplus_ins_simple_ins15)
 {
-  tdata datan;
-  char sid[TREEKEY_SIZE] = { 0 };
-  int i;
-  for (i=0; i<15; i++) {
-    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
-    initDataNode(&datan);
-    strncpy(datan.name, sid, TREEKEY_SIZE);
-    datan.parent = 0;
-    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
-    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
-  }
-  tree_map_keys(tree_get_root(), _output_keys, NULL);
-  //printf("\n");
+  _insert_n(15);
+  printf(".");
 }
 END_TEST
 
 START_TEST(test_bplus_ins_simple_ins25)
 {
-  tdata datan;
-  char sid[TREEKEY_SIZE] = { 0 };
-  int i;
-  for (i=0; i<25; i++) {
-    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
-    initDataNode(&datan);
-    strncpy(datan.name, sid, TREEKEY_SIZE);
-    datan.parent = 0;
-    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
-    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
-  }
-  tree_map_keys(tree_get_root(), _output_keys, NULL);
-  //printf("\n");
+  _insert_n(25);
+  printf(".");
 }
 END_TEST
 
 START_TEST(test_bplus_ins_simple_ins50)
 {
-  tdata datan;
-  char sid[TREEKEY_SIZE] = { 0 };
-  int i;
-  for (i=0; i<50; i++) {
-    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
-    initDataNode(&datan);
-    strncpy(datan.name, sid, TREEKEY_SIZE);
-    datan.parent = 0;
-    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
-    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
-  }
-  tree_map_keys(tree_get_root(), _output_keys, NULL);
-  //printf("\n");
+  _insert_n(50);
+  printf(".");
 }
 END_TEST
 
 START_TEST(test_bplus_ins_simple_ins175)
 {
+  _insert_n(175);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_simple_ins1000)
+{
+  _insert_n(1000);
+  printf(".\n");
+}
+END_TEST
+
+inline void _insert_check_immed_n(const int n) {
   tdata datan;
   char sid[TREEKEY_SIZE] = { 0 };
   int i;
-  for (i=0; i<175; i++) {
-    snprintf(sid, TREEKEY_SIZE, "k%03d", i);
+  for (i=0; i<n; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%04d", i);
     initDataNode(&datan);
     strncpy(datan.name, sid, TREEKEY_SIZE);
     datan.parent = 0;
     int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
-    fail_unless(r, "Tree insertion failed with error number %d (%s)", errno, strerror(errno));
+    fail_unless(r, "Tree insertion of key %s failed with error number %d (%s)", sid, errno, strerror(errno));
+    fileptr p = tree_sub_search(tree_get_root(), sid);
+    fail_unless(p, "Tree search for key %s failed with error number %d (%s)", sid, errno, strerror(errno));
   }
-  tree_map_keys(tree_get_root(), _output_keys, NULL);
-  //printf("\n");
+}
+
+START_TEST(test_bplus_ins_check_immed_ins)
+{
+  printf("Immediate-check insertions ");
+  _insert_check_immed_n(1);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_immed_ins10)
+{
+  _insert_check_immed_n(10);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_immed_ins12)
+{
+  _insert_check_immed_n(12);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_immed_ins13)
+{
+  _insert_check_immed_n(13);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_immed_ins14)
+{
+  _insert_check_immed_n(14);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_immed_ins15)
+{
+  _insert_check_immed_n(15);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_immed_ins25)
+{
+  _insert_check_immed_n(25);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_immed_ins50)
+{
+  _insert_check_immed_n(50);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_immed_ins175)
+{
+  _insert_check_immed_n(175);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_immed_ins1000)
+{
+  _insert_check_immed_n(1000);
+  printf(".\n");
+}
+END_TEST
+
+inline void _insert_check_defer_n(const int n) {
+  tdata datan;
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<n; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%04d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion of key %s failed with error number %d (%s)", sid, errno, strerror(errno));
+  }
+  for (i=0; i<n; i++) {
+    fileptr r = tree_sub_search(tree_get_root(), sid);
+    fail_unless(r, "Tree search for key %s failed with error number %d (%s)", sid, errno, strerror(errno));
+  }
+}
+
+START_TEST(test_bplus_ins_check_defer_ins)
+{
+  printf("Deferred-check insertions ");
+  _insert_check_defer_n(1);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_defer_ins10)
+{
+  _insert_check_defer_n(10);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_defer_ins12)
+{
+  _insert_check_defer_n(12);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_defer_ins13)
+{
+  _insert_check_defer_n(13);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_defer_ins14)
+{
+  _insert_check_defer_n(14);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_defer_ins15)
+{
+  _insert_check_defer_n(15);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_defer_ins25)
+{
+  _insert_check_defer_n(25);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_defer_ins50)
+{
+  _insert_check_defer_n(50);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_defer_ins175)
+{
+  _insert_check_defer_n(175);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_defer_ins1000)
+{
+  _insert_check_defer_n(1000);
+  printf(".\n");
+}
+END_TEST
+
+inline void _insert_check_map_n(const int n) {
+  tdata datan;
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<n; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%04d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion of key %s failed with error number %d (%s)", sid, errno, strerror(errno));
+  }
+  tkey keys[n];
+  int g = tree_get_all_keys(tree_get_root(), keys, n);
+  fail_if(g<0, "Fetching all keys failed with error number %d (%s)", -g, strerror(-g));
+  fail_unless(g==n, "Fetching all keys failed: returned %d when we expected %d", g, n);
+  for (i=0; i<n; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%04d", i);
+    fail_if(strncmp(sid, keys[i], TREEKEY_SIZE), "Tree key match failed for key %d (\"%s\"), should be \"%s\"", i, keys[i], sid);
+  }
+}
+
+START_TEST(test_bplus_ins_check_map_ins)
+{
+  printf("Map-check insertions ");
+  _insert_check_map_n(1);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_map_ins10)
+{
+  _insert_check_map_n(10);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_map_ins12)
+{
+  _insert_check_map_n(12);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_map_ins13)
+{
+  _insert_check_map_n(13);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_map_ins14)
+{
+  _insert_check_map_n(14);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_map_ins15)
+{
+  _insert_check_map_n(15);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_map_ins25)
+{
+  _insert_check_map_n(25);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_map_ins50)
+{
+  _insert_check_map_n(50);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_map_ins175)
+{
+  _insert_check_map_n(175);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_map_ins1000)
+{
+  _insert_check_map_n(1000);
+  printf(".\n");
+}
+END_TEST
+
+inline void _insert_check_data_immed_n(const int n) {
+  tdata datan;
+  tdata checkn;
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<n; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%04d", i);
+    initDataNode(&datan);
+    strncpy(datan.name, sid, TREEKEY_SIZE);
+    datan.parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion of key %s failed with error number %d (%s)", sid, errno, strerror(errno));
+    fileptr p = tree_sub_get(tree_get_root(), sid, (tblock*)&checkn);
+    fail_if(p, "Tree get for key %s failed with error number %d (%s)", sid, -p, strerror(-p));
+    fail_if(memcmp(&datan, &checkn, sizeof(tdata)), "Data block verification for key \"%s\" failed", sid);
+  }
+}
+
+START_TEST(test_bplus_ins_check_data_immed_ins)
+{
+  printf("Immediate-check insertions + data ");
+  _insert_check_data_immed_n(1);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_immed_ins10)
+{
+  _insert_check_data_immed_n(10);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_immed_ins12)
+{
+  _insert_check_data_immed_n(12);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_immed_ins13)
+{
+  _insert_check_data_immed_n(13);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_immed_ins14)
+{
+  _insert_check_data_immed_n(14);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_immed_ins15)
+{
+  _insert_check_data_immed_n(15);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_immed_ins25)
+{
+  _insert_check_data_immed_n(25);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_immed_ins50)
+{
+  _insert_check_data_immed_n(50);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_immed_ins175)
+{
+  _insert_check_data_immed_n(175);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_immed_ins1000)
+{
+  _insert_check_data_immed_n(1000);
+  printf(".\n");
+}
+END_TEST
+
+inline void _insert_check_data_defer_n(const int n) {
+  tdata datan[n];
+  char sid[TREEKEY_SIZE] = { 0 };
+  int i;
+  for (i=0; i<n; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%04d", i);
+    initDataNode(&datan[i]);
+    strncpy(datan[i].name, sid, TREEKEY_SIZE);
+    datan[i].parent = 0;
+    int r = tree_sub_insert(tree_get_root(), sid, (tblock*)&datan);
+    fail_unless(r, "Tree insertion of key %s failed with error number %d (%s)", sid, errno, strerror(errno));
+  }
+  for (i=0; i<n; i++) {
+    tdata checkn;
+    fileptr p = tree_sub_get(tree_get_root(), sid, (tblock*)&checkn);
+    fail_if(p, "Tree get for key %s failed with error number %d (%s)", sid, -p, strerror(-p));
+    p = memcmp(&datan[i], &checkn, sizeof(tdata));
+    if (p) DUMPDATA(&checkn);
+    fail_if(p, "Data block verification for key \"%s\" failed", sid);
+  }
+}
+
+START_TEST(test_bplus_ins_check_data_defer_ins)
+{
+  printf("Deferred-check insertions + data ");
+  _insert_check_data_defer_n(1);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_defer_ins10)
+{
+  _insert_check_data_defer_n(10);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_defer_ins12)
+{
+  _insert_check_data_defer_n(12);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_defer_ins13)
+{
+  _insert_check_data_defer_n(13);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_defer_ins14)
+{
+  _insert_check_data_defer_n(14);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_defer_ins15)
+{
+  _insert_check_data_defer_n(15);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_defer_ins25)
+{
+  _insert_check_data_defer_n(25);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_defer_ins50)
+{
+  _insert_check_data_defer_n(50);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_defer_ins175)
+{
+  _insert_check_data_defer_n(175);
+  printf(".");
+}
+END_TEST
+
+START_TEST(test_bplus_ins_check_data_defer_ins1000)
+{
+  _insert_check_data_defer_n(1000);
+  printf(".\n");
 }
 END_TEST
 
@@ -391,9 +783,9 @@ Suite *bplus_insert_suite (void) {
   tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins25);
   tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins50);
   tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins175);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins1000);
   suite_add_tcase(s, tc_ins_simple);
 
-#if 0
   /* i.e. insert and then search for the key within the same loop */
   TCase *tc_ins_check_immed = tcase_create("Insertion and immediate key check");
   tcase_add_checked_fixture(tc_ins_check_immed, bplus_core_open_setup, bplus_teardown);
@@ -406,6 +798,7 @@ Suite *bplus_insert_suite (void) {
   tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins25);
   tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins50);
   tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins175);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins1000);
   suite_add_tcase(s, tc_ins_check_immed);
 
   /* i.e. insert and then search for the key within a separate loop */
@@ -420,6 +813,7 @@ Suite *bplus_insert_suite (void) {
   tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins25);
   tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins50);
   tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins175);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins1000);
   suite_add_tcase(s, tc_ins_check_defer);
 
   /* i.e. insert and then check the array of keys matches what's expected */
@@ -434,14 +828,45 @@ Suite *bplus_insert_suite (void) {
   tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins25);
   tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins50);
   tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins175);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins1000);
   suite_add_tcase(s, tc_ins_check_map);
-#endif
+
+  /* i.e. insert and then search for the key within the same loop and check data */
+  TCase *tc_ins_check_data_immed = tcase_create("Insertion and immediate key + data check");
+  tcase_add_checked_fixture(tc_ins_check_data_immed, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins10);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins12);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins13);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins14);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins15);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins25);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins50);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins175);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins1000);
+  suite_add_tcase(s, tc_ins_check_data_immed);
+
+  /* i.e. insert and then search for the key within a separate loop and check data */
+  TCase *tc_ins_check_data_defer = tcase_create("Insertion and deferred key + data check");
+  tcase_add_checked_fixture(tc_ins_check_data_defer, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins10);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins12);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins13);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins14);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins15);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins25);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins50);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins175);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins1000);
+  suite_add_tcase(s, tc_ins_check_data_defer);
 
   return s;
 }
 
-// TODO: random-order insertion
 // TODO: reverse-order insertion
+// TODO: random-order insertion
+// TODO: check that block is the same before/after insertion
 
 int main (void) {
   int number_failed;

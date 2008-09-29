@@ -1650,7 +1650,6 @@ int tree_get_all_keys(fileptr root, tkey *keys, unsigned int max) {
   }
 
   tnode node;
-  unsigned int i;
   size_t cur=0;
 
   if (tree_sub_get_min(root, &node)) {

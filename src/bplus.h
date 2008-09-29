@@ -186,6 +186,7 @@ fileptr tree_sub_insert   (fileptr node, const tkey key, tblock *data);
 int     tree_read_sb      (tsblock *super);
 int     tree_write_sb     (tsblock *super);
 int     tree_map_keys     (const fileptr root, int (*func)(const char *, const fileptr, void *), void *data);
+int     tree_get_all_keys (fileptr root, tkey *keys, unsigned int max);
 size_t  tree_get_full_key_len(fileptr dataptr);
 char   *tree_get_full_key (fileptr dataptr);
 
