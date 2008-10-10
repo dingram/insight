@@ -10,11 +10,17 @@ int insight_plugin_init(insight_plugin_caps *caps, insight_funcs *funcs) {
 }
 
 int insight_plugin_import(const char *realpath, const char *filename) {
+  (void)realpath;
+  (void)filename;
   insight->log(LOG_INFO, "auto_group: import()");
   return EAGAIN;
 }
 
 int insight_plugin_chown(const char *realpath, const char *filename, uid_t uid, gid_t gid) {
+  (void)realpath;
+  (void)filename;
+  (void)uid;
+  (void)gid;
   insight->log(LOG_INFO, "auto_group: chown()");
   return EAGAIN;
 }

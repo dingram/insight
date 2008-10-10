@@ -58,7 +58,7 @@ void tree_dump_tree(fileptr root, int indent) {
         printf("%s  keys:\n", ind);
         for(i=0;i<ORDER-1;i++) {
           if (i < node->keycount) {
-            printf("%s \"%s\"-->[%d]\n", ind, node->keys[i], node->ptrs[i+1]);
+            printf("%s \"%s\"-->[%lu]\n", ind, node->keys[i], node->ptrs[i+1]);
             tree_dump_tree(node->ptrs[i+1], indent+2);
           } else {
             printf("%s \"\033[4m%s\033[m\"\n", ind, node->keys[i]);
@@ -68,7 +68,7 @@ void tree_dump_tree(fileptr root, int indent) {
     case MAGIC_DATANODE:
       {
         tdata *node = (tdata*)&block;
-        int i;
+        unsigned int i;
         printf("%s [%lu:DATA NODE]\n", ind, root);
         printf("%s  inodecount:     %d\n", ind, node->inodecount);
         printf("%s  flags: %x\n", ind, node->flags);
@@ -97,7 +97,7 @@ void tree_dump_tree(fileptr root, int indent) {
     case MAGIC_INODEBLOCK:
       {
         tinode *node = (tinode*)&block;
-        int i;
+        unsigned int i;
         printf("%s [%lu:INODE BLOCK]\n", ind, root);
         printf("%s  inodecount:     %d\n", ind, node->inodecount);
         printf("%s  inodes:", ind);
@@ -112,7 +112,7 @@ void tree_dump_tree(fileptr root, int indent) {
     case MAGIC_INODEDATA:
       {
         tidata *node = (tidata*)&block;
-        int i;
+        unsigned int i;
         printf("%s [%lu:INODE DATA BLOCK]\n", ind, root);
         printf("%s  refcount: %d\n", ind, node->refcount);
         printf("%s  refs:", ind);

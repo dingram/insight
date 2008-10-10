@@ -770,8 +770,103 @@ Suite * bplus_core_suite (void) {
   return s;
 }
 
-Suite *bplus_insert_suite (void) {
-  Suite *s = suite_create("bplus insertion");
+Suite *bplus_simple_insert_suite (void) {
+  Suite *s = suite_create("bplus simple insertion");
+
+  TCase *tc_ins_simple = tcase_create("Simple insertion");
+  tcase_add_checked_fixture(tc_ins_simple, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins10);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins12);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins13);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins14);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins15);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins25);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins50);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins175);
+  tcase_add_test(tc_ins_simple, test_bplus_ins_simple_ins1000);
+  suite_add_tcase(s, tc_ins_simple);
+
+  /* i.e. insert and then search for the key within the same loop */
+  TCase *tc_ins_check_immed = tcase_create("Insertion and immediate key check");
+  tcase_add_checked_fixture(tc_ins_check_immed, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins10);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins12);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins13);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins14);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins15);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins25);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins50);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins175);
+  tcase_add_test(tc_ins_check_immed, test_bplus_ins_check_immed_ins1000);
+  suite_add_tcase(s, tc_ins_check_immed);
+
+  /* i.e. insert and then search for the key within a separate loop */
+  TCase *tc_ins_check_defer = tcase_create("Insertion and deferred key check");
+  tcase_add_checked_fixture(tc_ins_check_defer, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins10);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins12);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins13);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins14);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins15);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins25);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins50);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins175);
+  tcase_add_test(tc_ins_check_defer, test_bplus_ins_check_defer_ins1000);
+  suite_add_tcase(s, tc_ins_check_defer);
+
+  /* i.e. insert and then check the array of keys matches what's expected */
+  TCase *tc_ins_check_map = tcase_create("Insertion and map_keys check");
+  tcase_add_checked_fixture(tc_ins_check_map, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins10);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins12);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins13);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins14);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins15);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins25);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins50);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins175);
+  tcase_add_test(tc_ins_check_map, test_bplus_ins_check_map_ins1000);
+  suite_add_tcase(s, tc_ins_check_map);
+
+  /* i.e. insert and then search for the key within the same loop and check data */
+  TCase *tc_ins_check_data_immed = tcase_create("Insertion and immediate key + data check");
+  tcase_add_checked_fixture(tc_ins_check_data_immed, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins10);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins12);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins13);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins14);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins15);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins25);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins50);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins175);
+  tcase_add_test(tc_ins_check_data_immed, test_bplus_ins_check_data_immed_ins1000);
+  suite_add_tcase(s, tc_ins_check_data_immed);
+
+  /* i.e. insert and then search for the key within a separate loop and check data */
+  TCase *tc_ins_check_data_defer = tcase_create("Insertion and deferred key + data check");
+  tcase_add_checked_fixture(tc_ins_check_data_defer, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins10);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins12);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins13);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins14);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins15);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins25);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins50);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins175);
+  tcase_add_test(tc_ins_check_data_defer, test_bplus_ins_check_data_defer_ins1000);
+  suite_add_tcase(s, tc_ins_check_data_defer);
+
+  return s;
+}
+
+Suite *bplus_sub_insert_single_suite (void) {
+  Suite *s = suite_create("bplus subtree insertion");
 
   TCase *tc_ins_simple = tcase_create("Simple insertion");
   tcase_add_checked_fixture(tc_ins_simple, bplus_core_open_setup, bplus_teardown);
@@ -867,14 +962,13 @@ Suite *bplus_insert_suite (void) {
 
 // TODO: reverse-order insertion
 // TODO: random-order insertion
-// TODO: check that block is the same before/after insertion
 
 int main (void) {
   int number_failed;
   printf("\n\033[1;32m>>>\033[m BEGIN TESTS \033[1;37m==========================================================================\033[m\n\n");
 
   SRunner *sr = srunner_create( bplus_core_suite() );
-  srunner_add_suite(sr, bplus_insert_suite() );
+  srunner_add_suite(sr, bplus_simple_insert_suite() );
 
   srunner_run_all(sr, CK_NORMAL);
 
