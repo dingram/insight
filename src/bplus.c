@@ -44,14 +44,28 @@ void tree_dump_dot_item(fileptr root) {
       {
         tnode *node = (tnode*)&block;
         unsigned int i;
-        printf("id%lu [label=\"NODE\\n" "keycount: %d\", shape=\"box\"", root, node->keycount);
+        printf("id%lu [label=\"NODE\\n" "keycount: %d\", shape=\"box\", style=\"filled\"", root, node->keycount);
         if (node->leaf) {
-          printf(", style=\"filled\", fillcolor=\"#9999ff\"");
+          printf(", fillcolor=\"#ccccff\"");
+        } else {
+          printf(", fillcolor=\"#9999ff\"");
         }
         printf("];\n");
-        for(i=0;i<node->keycount;i++) {
-          printf("id%lu -> id%lu [label=\"%s\"];\n", root, node->ptrs[i+1], node->keys[i]);
-          tree_dump_dot_item(node->ptrs[i+1]);
+        if (node->leaf) {
+          if (node->ptrs[0]) {
+            printf("id%lu -> id%lu [color=\"#ff7700\", constraint=false];\n", root, node->ptrs[0]);
+          }
+          for(i=0;i<node->keycount;i++) {
+            printf("id%lu -> id%lu [label=\"%s\"];\n", root, node->ptrs[i+1], node->keys[i]);
+            tree_dump_dot_item(node->ptrs[i+1]);
+          }
+        } else {
+          printf("id%lu -> id%lu [label=\"< %s\"];\n", root, node->ptrs[0], node->keys[0]);
+          tree_dump_dot_item(node->ptrs[0]);
+          for(i=0;i<node->keycount;i++) {
+            printf("id%lu -> id%lu [label=\"%s\"];\n", root, node->ptrs[i+1], node->keys[i]);
+            tree_dump_dot_item(node->ptrs[i+1]);
+          }
         }
       }
       break;
@@ -116,6 +130,7 @@ void tree_dump_dot_item(fileptr root) {
 
 void tree_dump_dot(fileptr root) {
   printf("digraph btree {\n");
+  printf("pad=0.3;\n");
   tree_dump_dot_item(root);
   printf("}\n");
 }
