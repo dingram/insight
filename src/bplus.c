@@ -17,6 +17,109 @@
 #include <set_ops.h>
 #include <insight.h>
 
+void tree_dump_dot_item(fileptr root) {
+  tblock block;
+
+  tree_read(root, &block);
+  switch (block.magic) {
+    case MAGIC_SUPERBLOCK:
+      {
+        tsblock *node = (tsblock*)&block;
+        printf("id%lu [label=\"SUPERBLOCK\\n" "v%d.%d\\n" "max_size: %lu\\n" "limbo count: %lu\", shape=\"box\", penwidth=3.0, style=\"filled\", fillcolor=\"#00ee33\"];\n", root, node->version>>8, node->version & 0xff, node->max_size, node->limbo_count);
+        if (node->root_index) {
+          printf("id%lu -> id%lu [label=\"root\"];\n", root, node->root_index);
+          tree_dump_dot_item(node->root_index);
+        }
+        if (node->inode_limbo) {
+          printf("id%lu -> id%lu [label=\"limbo\"];\n", root, node->inode_limbo);
+          tree_dump_dot_item(node->inode_limbo);
+        }
+        if (node->inode_root) {
+          printf("id%lu -> id%lu [label=\"inode\"];\n", root, node->inode_root);
+          tree_dump_dot_item(node->inode_root);
+        }
+      }
+      break;
+    case MAGIC_TREENODE:
+      {
+        tnode *node = (tnode*)&block;
+        unsigned int i;
+        printf("id%lu [label=\"NODE\\n" "keycount: %d\", shape=\"box\"", root, node->keycount);
+        if (node->leaf) {
+          printf(", style=\"filled\", fillcolor=\"#9999ff\"");
+        }
+        printf("];\n");
+        for(i=0;i<node->keycount;i++) {
+          printf("id%lu -> id%lu [label=\"%s\"];\n", root, node->ptrs[i+1], node->keys[i]);
+          tree_dump_dot_item(node->ptrs[i+1]);
+        }
+      }
+      break;
+    case MAGIC_DATANODE:
+      {
+        tdata *node = (tdata*)&block;
+        unsigned int i;
+        printf("id%lu [label=\"DATA\\n" "name: %s\\n" "inodecount: %d\\n" "flags: %d\\n" "parent: %lu\", shape=\"box\"];\n", root, node->name, node->inodecount, node->flags, node->parent);
+        if (node->subkeys) {
+          printf("id%lu -> id%lu [label=\"subkeys\", color=\"#cc0000\"];\n", root, node->subkeys);
+          tree_dump_dot_item(node->subkeys);
+        }
+#if 0
+        printf(" inodes:");
+        for(i=0;i<DATA_INODE_MAX;i++) printf((i>=node->inodecount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->inodes[i]);
+        printf("\n");
+        printf(" next_inodes: %lu\n", node->next_inodes);
+        if (node->next_inodes) {
+          tree_dump_dot_item(node->next_inodes);
+        }
+#endif
+      }
+      break;
+    case MAGIC_FREEBLOCK:
+      {
+        // TODO
+        freeblock *node = (freeblock*)&block;
+        printf("[%lu:FREE BLOCK]\n", root);
+        printf(" next free block: %lu\n", node->next);
+      }
+      break;
+    case MAGIC_INODEBLOCK:
+      {
+        // TODO
+        tinode *node = (tinode*)&block;
+        unsigned int i;
+        printf("[%lu:INODE BLOCK]\n", root);
+        printf(" inodecount:     %d\n", node->inodecount);
+        printf(" inodes:");
+        for(i=0;i<INODE_MAX;i++) printf((i>=node->inodecount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->inodes[i]);
+        printf("\n");
+        printf(" next_inodes: %lu\n", node->next_inodes);
+        if (node->next_inodes) {
+          tree_dump_dot_item(node->next_inodes);
+        }
+      }
+      break;
+    case MAGIC_INODEDATA:
+      {
+        // TODO
+        tidata *node = (tidata*)&block;
+        unsigned int i;
+        printf("[%lu:INODE DATA BLOCK]\n", root);
+        printf(" refcount: %d\n", node->refcount);
+        printf(" refs:");
+        for(i=0;i<REF_MAX;i++) printf((i>=node->refcount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->refs[i]);
+        printf("\n");
+      }
+      break;
+  }
+}
+
+void tree_dump_dot(fileptr root) {
+  printf("digraph btree {\n");
+  tree_dump_dot_item(root);
+  printf("}\n");
+}
+
 void tree_dump_tree(fileptr root, int indent) {
   tblock block;
   char ind[indent+1];

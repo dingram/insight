@@ -197,6 +197,7 @@ int inode_put_all(fileptr block, fileptr *inodes, unsigned int count);
 int inode_get_all(fileptr block, fileptr *inodes, unsigned int max);
 fileptr *inode_get_all_recurse(fileptr block, int *count);
 void tree_dump_tree(fileptr root, int indent);
+void tree_dump_dot(fileptr root);
 
 #ifndef MAX
 #define MAX(a,b)      ((a)>(b)?(a):(b))

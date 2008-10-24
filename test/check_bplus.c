@@ -201,6 +201,7 @@ START_TEST (test_bplus_core_existing_check_default_sb)
 }
 END_TEST
 
+#if 0
 int _output_keys(const char *key, const fileptr ignore, void *d) {
   (void)ignore;
   (void)d;
@@ -208,6 +209,7 @@ int _output_keys(const char *key, const fileptr ignore, void *d) {
   //printf("%s\n", key);
   return 0;
 }
+#endif
 
 inline void _insert_n(const int n) {
   tdata datan;
@@ -225,7 +227,7 @@ inline void _insert_n(const int n) {
 
 START_TEST(test_bplus_ins_simple_ins)
 {
-  printf("Simple insertions ");
+  printf("   Simple insertions ");
   _insert_n(1);
   printf(".");
 }
@@ -312,7 +314,7 @@ inline void _insert_check_immed_n(const int n) {
 
 START_TEST(test_bplus_ins_check_immed_ins)
 {
-  printf("Immediate-check insertions ");
+  printf("   Immediate-check insertions ");
   _insert_check_immed_n(1);
   printf(".");
 }
@@ -401,7 +403,7 @@ inline void _insert_check_defer_n(const int n) {
 
 START_TEST(test_bplus_ins_check_defer_ins)
 {
-  printf("Deferred-check insertions ");
+  printf("   Deferred-check insertions ");
   _insert_check_defer_n(1);
   printf(".");
 }
@@ -494,7 +496,7 @@ inline void _insert_check_map_n(const int n) {
 
 START_TEST(test_bplus_ins_check_map_ins)
 {
-  printf("Map-check insertions ");
+  printf("   Map-check insertions ");
   _insert_check_map_n(1);
   printf(".");
 }
@@ -583,7 +585,7 @@ inline void _insert_check_data_immed_n(const int n) {
 
 START_TEST(test_bplus_ins_check_data_immed_ins)
 {
-  printf("Immediate-check insertions + data ");
+  printf("   Immediate-check insertions + data ");
   _insert_check_data_immed_n(1);
   printf(".");
 }
@@ -677,7 +679,7 @@ inline void _insert_check_data_defer_n(const int n) {
 
 START_TEST(test_bplus_ins_check_data_defer_ins)
 {
-  printf("Deferred-check insertions + data ");
+  printf("   Deferred-check insertions + data ");
   _insert_check_data_defer_n(1);
   printf(".");
 }
@@ -743,6 +745,357 @@ START_TEST(test_bplus_ins_check_data_defer_ins1000)
 {
   _insert_check_data_defer_n(1000);
   printf(".\n");
+}
+END_TEST
+
+#define doInsert(d, k, p, n) do {\
+  initDataNode(&(d));\
+  strncpy((d).name, (k), TREEKEY_SIZE);\
+  (d).parent = (p);\
+  n = tree_sub_insert(((p)==0)?tree_get_root():(p), (k), (tblock*)&(d));\
+  fail_unless((n), "Tree insertion of key %s failed with error number %d (%s)", (k), errno, strerror(errno));\
+} while (0)
+
+START_TEST(test_bplus_ins_complex_df)
+{
+  fileptr newaddr[4];
+  tdata datan;
+
+  doInsert(datan, "attributes", 0, newaddr[0]);
+  doInsert(datan,            "bronzed", newaddr[0], newaddr[1]);
+  doInsert(datan,                    "huge",   newaddr[1], newaddr[2]);
+  doInsert(datan,                    "large",  newaddr[1], newaddr[2]);
+  doInsert(datan,                    "normal", newaddr[1], newaddr[2]);
+  doInsert(datan,                    "tiny",   newaddr[1], newaddr[2]);
+  doInsert(datan,            "ethnicity", newaddr[0], newaddr[1]);
+  doInsert(datan,                      "asian",  newaddr[1], newaddr[2]);
+  doInsert(datan,                      "black",  newaddr[1], newaddr[2]);
+  doInsert(datan,                      "latina", newaddr[1], newaddr[2]);
+  doInsert(datan,                      "mixed",  newaddr[1], newaddr[2]);
+  doInsert(datan,                      "white",  newaddr[1], newaddr[2]);
+  doInsert(datan,            "goth", newaddr[0], newaddr[1]);
+  doInsert(datan,            "hair", newaddr[0], newaddr[1]);
+  doInsert(datan,                 "black",    newaddr[1], newaddr[2]);
+  doInsert(datan,                 "blonde",   newaddr[1], newaddr[2]);
+  doInsert(datan,                 "brunette", newaddr[1], newaddr[2]);
+  doInsert(datan,                 "redhead",  newaddr[1], newaddr[2]);
+  doInsert(datan,            "matter",   newaddr[0], newaddr[1]);
+  doInsert(datan,            "previous", newaddr[0], newaddr[1]);
+  doInsert(datan,            "temp",     newaddr[0], newaddr[1]);
+  doInsert(datan,            "twist",    newaddr[0], newaddr[1]);
+  doInsert(datan,            "viking",   newaddr[0], newaddr[1]);
+  doInsert(datan,            "young",    newaddr[0], newaddr[1]);
+  doInsert(datan, "candle", 0, newaddr[0]);
+  doInsert(datan,        "downstairs",  newaddr[0], newaddr[1]);
+  doInsert(datan,        "nitric-skip", newaddr[0], newaddr[1]);
+  doInsert(datan,        "upstair",     newaddr[0], newaddr[1]);
+  doInsert(datan, "cartoon",  0, newaddr[0]);
+  doInsert(datan, "cleaning", 0, newaddr[0]);
+  doInsert(datan,          "backless", newaddr[0], newaddr[1]);
+  doInsert(datan,          "bikini",   newaddr[0], newaddr[1]);
+  doInsert(datan,                 "bottoms", newaddr[1], newaddr[2]);
+  doInsert(datan,                 "full",    newaddr[1], newaddr[2]);
+  doInsert(datan,                 "top",     newaddr[1], newaddr[2]);
+  doInsert(datan,          "denim",       newaddr[0], newaddr[1]);
+  doInsert(datan,          "dress",       newaddr[0], newaddr[1]);
+  doInsert(datan,          "hotpants",    newaddr[0], newaddr[1]);
+  doInsert(datan,          "jeans",       newaddr[0], newaddr[1]);
+  doInsert(datan,          "provocative", newaddr[0], newaddr[1]);
+  doInsert(datan,          "see-through", newaddr[0], newaddr[1]);
+  doInsert(datan,          "shorts",      newaddr[0], newaddr[1]);
+  doInsert(datan,          "skirt",       newaddr[0], newaddr[1]);
+  doInsert(datan,                "knee",    newaddr[1], newaddr[2]);
+  doInsert(datan,                "long",    newaddr[1], newaddr[2]);
+  doInsert(datan,                "micro",   newaddr[1], newaddr[2]);
+  doInsert(datan,                "mini",    newaddr[1], newaddr[2]);
+  doInsert(datan,                "short",   newaddr[1], newaddr[2]);
+  doInsert(datan,          "tight",     newaddr[0], newaddr[1]);
+  doInsert(datan,          "underwear", newaddr[0], newaddr[1]);
+  doInsert(datan,                    "bra",        newaddr[1], newaddr[2]);
+  doInsert(datan,                    "corset",     newaddr[1], newaddr[2]);
+  doInsert(datan,                    "panties",    newaddr[1], newaddr[2]);
+  doInsert(datan,                    "stockings",  newaddr[1], newaddr[2]);
+  doInsert(datan,                    "suspenders", newaddr[1], newaddr[2]);
+  doInsert(datan,                    "thong",      newaddr[1], newaddr[2]);
+  doInsert(datan, "compilation", 0, newaddr[0]);
+  doInsert(datan, "favourite",   0, newaddr[0]);
+  doInsert(datan, "girls",       0, newaddr[0]);
+  doInsert(datan,       "1",        newaddr[0], newaddr[1]);
+  doInsert(datan,       "2",        newaddr[0], newaddr[1]);
+  doInsert(datan,       "3",        newaddr[0], newaddr[1]);
+  doInsert(datan,       "4",        newaddr[0], newaddr[1]);
+  doInsert(datan,       "5",        newaddr[0], newaddr[1]);
+  doInsert(datan,       "6",        newaddr[0], newaddr[1]);
+  doInsert(datan,       "7",        newaddr[0], newaddr[1]);
+  doInsert(datan, "guys", 0, newaddr[0]);
+  doInsert(datan,      "1", newaddr[0], newaddr[1]);
+  doInsert(datan,      "2", newaddr[0], newaddr[1]);
+  doInsert(datan, "location", 0, newaddr[0]);
+  doInsert(datan,          "beach",         newaddr[0], newaddr[1]);
+  doInsert(datan,          "chanting-room", newaddr[0], newaddr[1]);
+  doInsert(datan,          "club",          newaddr[0], newaddr[1]);
+  doInsert(datan,          "house",         newaddr[0], newaddr[1]);
+  doInsert(datan,          "park",          newaddr[0], newaddr[1]);
+  doInsert(datan,          "pool",          newaddr[0], newaddr[1]);
+  doInsert(datan,          "public",        newaddr[0], newaddr[1]);
+  doInsert(datan,          "school",        newaddr[0], newaddr[1]);
+  doInsert(datan, "nailbrush", 0, newaddr[0]);
+  doInsert(datan,           "bookdealer", newaddr[0], newaddr[1]);
+  doInsert(datan,           "clothed",    newaddr[0], newaddr[1]);
+  doInsert(datan,           "flooding",   newaddr[0], newaddr[1]);
+  doInsert(datan,           "handbar",    newaddr[0], newaddr[1]);
+  doInsert(datan,           "linguist",   newaddr[0], newaddr[1]);
+  doInsert(datan,           "named",      newaddr[0], newaddr[1]);
+  doInsert(datan,           "topsoil",    newaddr[0], newaddr[1]);
+  doInsert(datan, "photo",  0, newaddr[0]);
+  doInsert(datan, "series", 0, newaddr[0]);
+  doInsert(datan,        "RealignKites", newaddr[0], newaddr[1]);
+  doInsert(datan,                     "8thSidersLeaners",   newaddr[1], newaddr[2]);
+  doInsert(datan,                     "BagNaggings",        newaddr[1], newaddr[2]);
+  doInsert(datan,                     "CobFixate",          newaddr[1], newaddr[2]);
+  doInsert(datan,                     "EvilSadPlanets",     newaddr[1], newaddr[2]);
+  doInsert(datan,                     "FirstTileArrangers", newaddr[1], newaddr[2]);
+  doInsert(datan,                     "FlowerTopic",        newaddr[1], newaddr[2]);
+  doInsert(datan,                     "MileInBasins",       newaddr[1], newaddr[2]);
+  doInsert(datan,                     "MimeNextDoor",       newaddr[1], newaddr[2]);
+  doInsert(datan,                     "MoneyTicks",         newaddr[1], newaddr[2]);
+  doInsert(datan,                     "MonsterClears",      newaddr[1], newaddr[2]);
+  doInsert(datan,                     "Pour42",             newaddr[1], newaddr[2]);
+  doInsert(datan,                     "StreetBlogJack",     newaddr[1], newaddr[2]);
+  doInsert(datan, "sub", 0, newaddr[0]);
+  doInsert(datan,     ".athlete", newaddr[0], newaddr[1]);
+  doInsert(datan,              "dud", newaddr[1], newaddr[2]);
+  doInsert(datan,              "dud`1",   newaddr[2], newaddr[3]);
+  doInsert(datan,              "dud`2",   newaddr[2], newaddr[3]);
+  doInsert(datan,              "hyper", newaddr[1], newaddr[2]);
+  doInsert(datan,              "hyper`1", newaddr[2], newaddr[3]);
+  doInsert(datan,     "a2ogm",    newaddr[0], newaddr[1]);
+  doInsert(datan,     "avow",     newaddr[0], newaddr[1]);
+  doInsert(datan,     "crackpot", newaddr[0], newaddr[1]);
+  doInsert(datan,     "do",       newaddr[0], newaddr[1]);
+  doInsert(datan,     "fulcrum",  newaddr[0], newaddr[1]);
+  doInsert(datan,             "avow",    newaddr[1], newaddr[2]);
+  doInsert(datan,             "self",    newaddr[1], newaddr[2]);
+  doInsert(datan,             "vaccine", newaddr[1], newaddr[2]);
+  doInsert(datan,     "gardener",  newaddr[0], newaddr[1]);
+  doInsert(datan,     "invisible", newaddr[0], newaddr[1]);
+  doInsert(datan,               "carrot",     newaddr[1], newaddr[2]);
+  doInsert(datan,               "cucumber",   newaddr[1], newaddr[2]);
+  doInsert(datan,               "golf-ball",  newaddr[1], newaddr[2]);
+  doInsert(datan,               "hush-diner", newaddr[1], newaddr[2]);
+  doInsert(datan,     "longbow", newaddr[0], newaddr[1]);
+  doInsert(datan,             "62",        newaddr[1], newaddr[2]);
+  doInsert(datan,             "fictional", newaddr[1], newaddr[2]);
+  doInsert(datan,             "kinsman",   newaddr[1], newaddr[2]);
+  doInsert(datan,             "opus",      newaddr[1], newaddr[2]);
+  doInsert(datan,             "toys",      newaddr[1], newaddr[2]);
+  doInsert(datan,                  "diner",    newaddr[2], newaddr[3]);
+  doInsert(datan,                  "vocation", newaddr[2], newaddr[3]);
+  doInsert(datan,     "opus", newaddr[0], newaddr[1]);
+  doInsert(datan,          "2giftby", newaddr[1], newaddr[2]);
+  doInsert(datan,                  "sugared",  newaddr[2], newaddr[3]);
+  doInsert(datan,                  "toneless", newaddr[2], newaddr[3]);
+  doInsert(datan,          "bp", newaddr[1], newaddr[2]);
+  doInsert(datan,     "oven",             newaddr[0], newaddr[1]);
+  doInsert(datan,     "p2ogm",            newaddr[0], newaddr[1]);
+  doInsert(datan,     "reverse-gardener", newaddr[0], newaddr[1]);
+  doInsert(datan,     "solo",             newaddr[0], newaddr[1]);
+  doInsert(datan,          "fictional",      newaddr[1], newaddr[2]);
+  doInsert(datan,          "toys",           newaddr[1], newaddr[2]);
+  doInsert(datan,               "diner",        newaddr[2], newaddr[3]);
+  doInsert(datan,               "vocation",     newaddr[2], newaddr[3]);
+  doInsert(datan,     "threshold", newaddr[0], newaddr[1]);
+  doInsert(datan,               "aaa", newaddr[1], newaddr[2]);
+  doInsert(datan,               "baa", newaddr[1], newaddr[2]);
+  doInsert(datan,               "bba", newaddr[1], newaddr[2]);
+  doInsert(datan,     "vaccine", newaddr[0], newaddr[1]);
+  doInsert(datan, "video", 0, newaddr[0]);
+
+  tree_dump_dot(0);
+
+  /*
+  tkey keys[n];
+  int g = tree_get_all_keys(tree_get_root(), keys, n);
+  fail_if(g<0, "Fetching all keys failed with error number %d (%s)", -g, strerror(-g));
+  fail_unless(g==n, "Fetching all keys failed: returned %d when we expected %d", g, n);
+  for (i=0; i<n; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%04d", i);
+    fail_if(strncmp(sid, keys[i], TREEKEY_SIZE), "Tree key match failed for key %d (\"%s\"), should be \"%s\"", i, keys[i], sid);
+  }
+  */
+}
+END_TEST
+
+START_TEST(test_bplus_ins_complex_bf)
+{
+  fileptr newaddr[4];
+  tdata datan;
+
+  // TODO: this is mostly wrong
+
+  doInsert(datan, "attributes",  0, newaddr[0]);
+  doInsert(datan, "candle",      0, newaddr[0]);
+  doInsert(datan, "cartoon",     0, newaddr[0]);
+  doInsert(datan, "cleaning",    0, newaddr[0]);
+  doInsert(datan, "compilation", 0, newaddr[0]);
+  doInsert(datan, "favourite",   0, newaddr[0]);
+  doInsert(datan, "girls",       0, newaddr[0]);
+  doInsert(datan, "guys",        0, newaddr[0]);
+  doInsert(datan, "location",    0, newaddr[0]);
+  doInsert(datan, "nailbrush",   0, newaddr[0]);
+  doInsert(datan, "photo",       0, newaddr[0]);
+  doInsert(datan, "series",      0, newaddr[0]);
+  doInsert(datan, "sub",         0, newaddr[0]);
+  doInsert(datan, "video",       0, newaddr[0]);
+
+  doInsert(datan, "attributes`bronzed",     newaddr[0], newaddr[1]);
+  doInsert(datan, "attributes`ethnicity",   newaddr[0], newaddr[1]);
+  doInsert(datan, "attributes`goth",        newaddr[0], newaddr[1]);
+  doInsert(datan, "attributes`hair",        newaddr[0], newaddr[1]);
+  doInsert(datan, "attributes`matter",      newaddr[0], newaddr[1]);
+  doInsert(datan, "attributes`previous",    newaddr[0], newaddr[1]);
+  doInsert(datan, "attributes`temp",        newaddr[0], newaddr[1]);
+  doInsert(datan, "attributes`twist",       newaddr[0], newaddr[1]);
+  doInsert(datan, "attributes`viking",      newaddr[0], newaddr[1]);
+  doInsert(datan, "attributes`young",       newaddr[0], newaddr[1]);
+  doInsert(datan, "candle`downstairs",      newaddr[0], newaddr[1]);
+  doInsert(datan, "candle`nitric-skip",     newaddr[0], newaddr[1]);
+  doInsert(datan, "candle`upstair",         newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`backless",      newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`bikini",        newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`denim",         newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`dress",         newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`hotpants",      newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`jeans",         newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`provocative",   newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`see-through",   newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`shorts",        newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`skirt",         newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`tight",         newaddr[0], newaddr[1]);
+  doInsert(datan, "cleaning`underwear",     newaddr[0], newaddr[1]);
+  doInsert(datan, "girls`1",                newaddr[0], newaddr[1]);
+  doInsert(datan, "girls`2",                newaddr[0], newaddr[1]);
+  doInsert(datan, "girls`3",                newaddr[0], newaddr[1]);
+  doInsert(datan, "girls`4",                newaddr[0], newaddr[1]);
+  doInsert(datan, "girls`5",                newaddr[0], newaddr[1]);
+  doInsert(datan, "girls`6",                newaddr[0], newaddr[1]);
+  doInsert(datan, "girls`7",                newaddr[0], newaddr[1]);
+  doInsert(datan, "guys`1",                 newaddr[0], newaddr[1]);
+  doInsert(datan, "guys`2",                 newaddr[0], newaddr[1]);
+  doInsert(datan, "location`beach",         newaddr[0], newaddr[1]);
+  doInsert(datan, "location`chanting-room", newaddr[0], newaddr[1]);
+  doInsert(datan, "location`club",          newaddr[0], newaddr[1]);
+  doInsert(datan, "location`house",         newaddr[0], newaddr[1]);
+  doInsert(datan, "location`park",          newaddr[0], newaddr[1]);
+  doInsert(datan, "location`pool",          newaddr[0], newaddr[1]);
+  doInsert(datan, "location`public",        newaddr[0], newaddr[1]);
+  doInsert(datan, "location`school",        newaddr[0], newaddr[1]);
+  doInsert(datan, "nailbrush`bookdealer",   newaddr[0], newaddr[1]);
+  doInsert(datan, "nailbrush`clothed",      newaddr[0], newaddr[1]);
+  doInsert(datan, "nailbrush`flooding",     newaddr[0], newaddr[1]);
+  doInsert(datan, "nailbrush`handbar",      newaddr[0], newaddr[1]);
+  doInsert(datan, "nailbrush`linguist",     newaddr[0], newaddr[1]);
+  doInsert(datan, "nailbrush`named",        newaddr[0], newaddr[1]);
+  doInsert(datan, "nailbrush`topsoil",      newaddr[0], newaddr[1]);
+  doInsert(datan, "series`RealignKites",    newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`.athlete",           newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`a2ogm",              newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`avow",               newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`crackpot",           newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`do",                 newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`fulcrum",            newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`gardener",           newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`invisible",          newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`longbow",            newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`opus",               newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`oven",               newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`p2ogm",              newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`reverse-gardener",   newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`solo",               newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`threshold",          newaddr[0], newaddr[1]);
+  doInsert(datan, "sub`vaccine",            newaddr[0], newaddr[1]);
+
+  doInsert(datan, "attributes`bronzed`huge",                newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`bronzed`large",               newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`bronzed`normal",              newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`bronzed`tiny",                newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`ethnicity`asian",             newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`ethnicity`black",             newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`ethnicity`latina",            newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`ethnicity`mixed",             newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`ethnicity`white",             newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`hair`black",                  newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`hair`blonde",                 newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`hair`brunette",               newaddr[1], newaddr[2]);
+  doInsert(datan, "attributes`hair`redhead",                newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`bikini`bottoms",                newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`bikini`full",                   newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`bikini`top",                    newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`skirt`knee",                    newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`skirt`long",                    newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`skirt`micro",                   newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`skirt`mini",                    newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`skirt`short",                   newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`underwear`bra",                 newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`underwear`corset",              newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`underwear`panties",             newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`underwear`stockings",           newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`underwear`suspenders",          newaddr[1], newaddr[2]);
+  doInsert(datan, "cleaning`underwear`thong",               newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`8thSidersLeaners",   newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`BagNaggings",        newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`CobFixate",          newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`EvilSadPlanets",     newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`FirstTileArrangers", newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`FlowerTopic",        newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`MileInBasins",       newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`MimeNextDoor",       newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`MoneyTicks",         newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`MonsterClears",      newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`Pour42",             newaddr[1], newaddr[2]);
+  doInsert(datan, "series`RealignKites`StreetBlogJack",     newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`.athlete`dud",                       newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`.athlete`hyper",                     newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`fulcrum`avow",                       newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`fulcrum`self",                       newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`fulcrum`vaccine",                    newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`invisible`carrot",                   newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`invisible`cucumber",                 newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`invisible`golf-ball",                newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`invisible`hush-diner",               newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`longbow`62",                         newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`longbow`fictional",                  newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`longbow`kinsman",                    newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`longbow`opus",                       newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`longbow`toys",                       newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`opus`2giftby",                       newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`opus`bp",                            newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`solo`fictional",                     newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`solo`toys",                          newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`threshold`aaa",                      newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`threshold`baa",                      newaddr[1], newaddr[2]);
+  doInsert(datan, "sub`threshold`bba",                      newaddr[1], newaddr[2]);
+
+  doInsert(datan, "sub`.athlete`dud`1",         newaddr[2], newaddr[3]);
+  doInsert(datan, "sub`.athlete`dud`2",         newaddr[2], newaddr[3]);
+  doInsert(datan, "sub`.athlete`hyper`1",       newaddr[2], newaddr[3]);
+  doInsert(datan, "sub`longbow`toys`diner",     newaddr[2], newaddr[3]);
+  doInsert(datan, "sub`longbow`toys`vocation",  newaddr[2], newaddr[3]);
+  doInsert(datan, "sub`opus`2giftby`sugared",   newaddr[2], newaddr[3]);
+  doInsert(datan, "sub`opus`2giftby`toneless",  newaddr[2], newaddr[3]);
+  doInsert(datan, "sub`solo`toys`diner",        newaddr[2], newaddr[3]);
+  doInsert(datan, "sub`solo`toys`vocation",     newaddr[2], newaddr[3]);
+
+  /*
+  tkey keys[n];
+  int g = tree_get_all_keys(tree_get_root(), keys, n);
+  fail_if(g<0, "Fetching all keys failed with error number %d (%s)", -g, strerror(-g));
+  fail_unless(g==n, "Fetching all keys failed: returned %d when we expected %d", g, n);
+  for (i=0; i<n; i++) {
+    snprintf(sid, TREEKEY_SIZE, "k%04d", i);
+    fail_if(strncmp(sid, keys[i], TREEKEY_SIZE), "Tree key match failed for key %d (\"%s\"), should be \"%s\"", i, keys[i], sid);
+  }
+  */
 }
 END_TEST
 
@@ -960,6 +1313,22 @@ Suite *bplus_sub_insert_single_suite (void) {
   return s;
 }
 
+Suite *bplus_complex_insert_suite (void) {
+  Suite *s = suite_create("bplus complex insertion");
+
+  TCase *tc_depth_first = tcase_create("Complex (depth-first)");
+  tcase_add_checked_fixture(tc_depth_first, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_depth_first, test_bplus_ins_complex_df);
+  suite_add_tcase(s, tc_depth_first);
+
+  TCase *tc_breadth_first = tcase_create("Complex (breadth-first)");
+  tcase_add_checked_fixture(tc_breadth_first, bplus_core_open_setup, bplus_teardown);
+  tcase_add_test(tc_breadth_first, test_bplus_ins_complex_bf);
+  suite_add_tcase(s, tc_breadth_first);
+
+  return s;
+}
+
 // TODO: reverse-order insertion
 // TODO: random-order insertion
 
@@ -969,6 +1338,7 @@ int main (void) {
 
   SRunner *sr = srunner_create( bplus_core_suite() );
   srunner_add_suite(sr, bplus_simple_insert_suite() );
+  srunner_add_suite(sr, bplus_complex_insert_suite() );
 
   srunner_run_all(sr, CK_NORMAL);
 
