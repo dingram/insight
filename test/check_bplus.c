@@ -862,13 +862,19 @@ START_TEST(test_bplus_ins_complex_df)
   doInsert(datan,                     "MonsterClears",      newaddr[1], newaddr[2]);
   doInsert(datan,                     "Pour42",             newaddr[1], newaddr[2]);
   doInsert(datan,                     "StreetBlogJack",     newaddr[1], newaddr[2]);
+
+  // tree_dump_dot(0);
+
   doInsert(datan, "sub", 0, newaddr[0]);
+
+  // tree_dump_dot(0);
+
   doInsert(datan,     ".athlete", newaddr[0], newaddr[1]);
   doInsert(datan,              "dud", newaddr[1], newaddr[2]);
-  doInsert(datan,              "dud`1",   newaddr[2], newaddr[3]);
-  doInsert(datan,              "dud`2",   newaddr[2], newaddr[3]);
+  doInsert(datan,                  "1",   newaddr[2], newaddr[3]);
+  doInsert(datan,                  "2",   newaddr[2], newaddr[3]);
   doInsert(datan,              "hyper", newaddr[1], newaddr[2]);
-  doInsert(datan,              "hyper`1", newaddr[2], newaddr[3]);
+  doInsert(datan,                    "1", newaddr[2], newaddr[3]);
   doInsert(datan,     "a2ogm",    newaddr[0], newaddr[1]);
   doInsert(datan,     "avow",     newaddr[0], newaddr[1]);
   doInsert(datan,     "crackpot", newaddr[0], newaddr[1]);
@@ -899,7 +905,13 @@ START_TEST(test_bplus_ins_complex_df)
   doInsert(datan,     "oven",             newaddr[0], newaddr[1]);
   doInsert(datan,     "p2ogm",            newaddr[0], newaddr[1]);
   doInsert(datan,     "reverse-gardener", newaddr[0], newaddr[1]);
+
+  // tree_dump_dot(0);
+
   doInsert(datan,     "solo",             newaddr[0], newaddr[1]);
+
+  // tree_dump_dot(0);
+
   doInsert(datan,          "fictional",      newaddr[1], newaddr[2]);
   doInsert(datan,          "toys",           newaddr[1], newaddr[2]);
   doInsert(datan,               "diner",        newaddr[2], newaddr[3]);
@@ -909,9 +921,12 @@ START_TEST(test_bplus_ins_complex_df)
   doInsert(datan,               "baa", newaddr[1], newaddr[2]);
   doInsert(datan,               "bba", newaddr[1], newaddr[2]);
   doInsert(datan,     "vaccine", newaddr[0], newaddr[1]);
+
+  // tree_dump_dot(0);
+
   doInsert(datan, "video", 0, newaddr[0]);
 
-  tree_dump_dot(0);
+  // tree_dump_dot(0);
 
   /*
   tkey keys[n];
