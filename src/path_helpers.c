@@ -410,7 +410,7 @@ static int _sibcallback(const char *key, const fileptr val, void *data) {
     int cur;
     int sibcount;
   } *thing = data;
-  if (thing->cur > thing->sibcount) {
+  if (thing->cur >= thing->sibcount) {
     PMSG(LOG_ERR, "\033[1;31mSERIOUS ERROR\033[m");
     PMSG(LOG_ERR, "\033[1;31mcur: %d; sibcount: %d\033[m", thing->cur, thing->sibcount);
     return -1;

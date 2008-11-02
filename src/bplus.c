@@ -50,7 +50,7 @@ void tree_dump_dot_item(FILE *target, fileptr root) {
       {
         tnode *node = (tnode*)&block;
         unsigned int i;
-        fprintf(target, "id%lu [label=\"NODE %d\\n" "keycount: %d\", shape=\"box\", style=\"filled\"", root, root, node->keycount);
+        fprintf(target, "id%lu [label=\"NODE %lu\\n" "keycount: %d\", shape=\"box\", style=\"filled\"", root, root, node->keycount);
         if (node->leaf) {
           fprintf(target, ", fillcolor=\"#ccccff\"");
         } else {
@@ -118,11 +118,11 @@ void tree_dump_dot_item(FILE *target, fileptr root) {
     case MAGIC_INODEDATA:
       {
         tidata *node = (tidata*)&block;
-        unsigned int i;
         fprintf(target, "id%lu [label=\"INODEDATA\\n" "refcount: %d\", shape=\"box\", style=\"filled\", fillcolor=\"#ffcc66\"];\n", root, node->refcount);
 #if 0
         fprintf(target, " refcount: %d\n", node->refcount);
         fprintf(target, " refs:");
+        unsigned int i;
         for(i=0;i<REF_MAX;i++) fprintf(target, (i>=node->refcount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->refs[i]);
         fprintf(target, "\n");
 #endif
@@ -953,14 +953,17 @@ int tree_sub_key_count(fileptr root) {
     return -EIO;
   DEBUG("Leaf node of tree root %lu with minimal key", root);
 
-  do {
+  while (1) {
     DEBUG("Total to now: %d; this node keycount: %d", total, node.keycount);
     total += node.keycount;
-    if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
+    DEBUG("Next node: %lu", node.ptrs[0]);
+    if (!node.ptrs[0]) {
+      break;
+    } else if (node.ptrs[0] && tree_read(node.ptrs[0], (tblock*) &node)) {
       DEBUG("Could not read next pointer");
       return -EIO;
     }
-  } while (node.ptrs[0]);
+  }
   DEBUG("Final total: %d", total);
 
   return total;
