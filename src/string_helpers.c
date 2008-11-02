@@ -184,7 +184,14 @@ char **strsplit(const char *input, const char sep, int *count) {
   return bits;
 }
 
-/* XXX: assumes buf is 9 chars long */
+/**
+ * Very efficient conversion of a value to its eight-digit uppercase
+ * hexadecimal representation.
+ *
+ * @param[out] buf A buffer of at least 9 characters to be filled with the hex
+ *                 representation of \a val.
+ * @param[in]  val The number to convert to hex.
+ */
 inline void hex_to_string(char *buf, unsigned long val) {
   int i;
   buf[8]='\0';
@@ -228,6 +235,14 @@ inline void hex_to_string(char *buf, unsigned long val) {
 	} while(0)
 
 
+/**
+ * Old path hashing algorithm, based on one from reiserfs. This leads to quite
+ * a few collisions though.
+ *
+ * @param path The path to be hashed.
+ * @return The 32-bit hash of the path.
+ * @author Jeremy Fitzhardinge <jeremy@zip.com.au>
+ */
 unsigned long hash_path_old(char const *path) {
 
 	unsigned long k[] = { 0x9464a485, 0x542e1a94, 0x3e846bff, 0xb75bcfc3 };
@@ -318,6 +333,13 @@ unsigned long hash_path_old(char const *path) {
                        +(uint32_t)(((const uint8_t *)(d))[0]) )
 #endif
 
+/**
+ * New and fast path hashing algorithm, based on an algorithm by ???.
+ *
+ * @param path The path to be hashed.
+ * @return The 32-bit hash of the path.
+ * @author ???
+ */
 unsigned long hash_path(char const * path) {
   int len = strlen(path);
 

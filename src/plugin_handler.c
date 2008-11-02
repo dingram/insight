@@ -35,14 +35,35 @@
 
 /* default implementations if none given */
 
+/** Default implementation - returns <tt>ENOTSUP</tt>, thereby skipping this plugin. */
 static int _plugin_default_chmod(const char *op, const char *fn, mode_t m) { (void)op;(void)fn;(void)m; return ENOTSUP; }
+/** Default implementation - returns <tt>ENOTSUP</tt>, thereby skipping this plugin. */
 static int _plugin_default_chown(const char *op, const char *fn, uid_t u, gid_t g) { (void)op;(void)fn;(void)u;(void)g; return ENOTSUP; }
+/** Default implementation - returns <tt>ENOTSUP</tt>, thereby skipping this plugin. */
 static int _plugin_default_write(const char *op, const char *fn)  { (void)op;(void)fn; return ENOTSUP; }
+/** Default implementation - returns <tt>ENOTSUP</tt>, thereby skipping this plugin. */
 static int _plugin_default_rename(const char *op, const char *on, const char *nn)  { (void)op;(void)on;(void)nn; return ENOTSUP; }
+/** Default implementation - returns <tt>ENOTSUP</tt>, thereby skipping this plugin. */
 static int _plugin_default_import(const char *op, const char *fn) { (void)op;(void)fn; return ENOTSUP; }
+/** Default implementation - returns <tt>ENOTSUP</tt>, thereby skipping this plugin. */
 static void _plugin_default_cleanup() { }
 
 /* process the plugin chain */
+
+/**
+ * Process all plugins that should be run when the file's mode is changed.
+ *
+ * The plugin should return a value to indicate how to proceed:
+ *   - 0 => success; abort chain
+ *   - (+)EAGAIN => success; proceed with next in chain
+ *   - (+)ENOTSUP => don't handle this; proceed with next
+ *   - negative error code => serious error; abort chain and report
+ *   - positive error code => error; continue with next in chain, no report
+ *
+ * @param original_path The path to the actual file in the real VFS.
+ * @param filename      The filename inside Insight.
+ * @param mode          The new file mode.
+ */
 int plugin_process_chmod(const char *original_path, const char *filename, mode_t mode) {
   (void)original_path;
   (void)filename;
@@ -50,6 +71,22 @@ int plugin_process_chmod(const char *original_path, const char *filename, mode_t
   return 0;
 }
 
+/**
+ * Process all plugins that should be run when the owner/owning group of a file
+ * changes.
+ *
+ * The plugin should return a value to indicate how to proceed:
+ *   - 0 => success; abort chain
+ *   - (+)EAGAIN => success; proceed with next in chain
+ *   - (+)ENOTSUP => don't handle this; proceed with next
+ *   - negative error code => serious error; abort chain and report
+ *   - positive error code => error; continue with next in chain, no report
+ *
+ * @param original_path The path to the actual file in the real VFS.
+ * @param filename      The filename inside Insight.
+ * @param uid           The new owner ID.
+ * @param gid           The new owning group ID.
+ */
 int plugin_process_chown(const char *original_path, const char *filename, uid_t uid, gid_t gid) {
   (void)original_path;
   (void)filename;
@@ -58,12 +95,39 @@ int plugin_process_chown(const char *original_path, const char *filename, uid_t 
   return 0;
 }
 
+/**
+ * Process all plugins that should be run on file write.
+ *
+ * The plugin should return a value to indicate how to proceed:
+ *   - 0 => success; abort chain
+ *   - (+)EAGAIN => success; proceed with next in chain
+ *   - (+)ENOTSUP => don't handle this; proceed with next
+ *   - negative error code => serious error; abort chain and report
+ *   - positive error code => error; continue with next in chain, no report
+ *
+ * @param original_path The path to the actual file in the real VFS.
+ * @param filename      The filename inside Insight.
+ */
 int plugin_process_write(const char *original_path, const char *filename) {
   (void)original_path;
   (void)filename;
   return 0;
 }
 
+/**
+ * Process all plugins that should be run when a file is renamed.
+ *
+ * The plugin should return a value to indicate how to proceed:
+ *   - 0 => success; abort chain
+ *   - (+)EAGAIN => success; proceed with next in chain
+ *   - (+)ENOTSUP => don't handle this; proceed with next
+ *   - negative error code => serious error; abort chain and report
+ *   - positive error code => error; continue with next in chain, no report
+ *
+ * @param original_path The path to the actual file in the real VFS.
+ * @param oldname       The old filename inside Insight.
+ * @param newname       The new filename inside Insight.
+ */
 int plugin_process_rename(const char *original_path, const char *oldname, const char *newname) {
   (void)original_path;
   (void)oldname;
@@ -71,16 +135,21 @@ int plugin_process_rename(const char *original_path, const char *oldname, const 
   return 0;
 }
 
+/**
+ * Process all plugins that should be run on file import.
+ *
+ * The plugin should return a value to indicate how to proceed:
+ *   - 0 => success; abort chain
+ *   - (+)EAGAIN => success; proceed with next in chain
+ *   - (+)ENOTSUP => don't handle this; proceed with next
+ *   - negative error code => serious error; abort chain and report
+ *   - positive error code => error; continue with next in chain, no report
+ *
+ * @param original_path The path to the actual file in the real VFS.
+ * @param filename      The filename inside Insight.
+ */
 int plugin_process_import(const char *original_path, const char *filename) {
   DEBUG("Plugin processing: IMPORT");
-  /*
-   - Plugin returns value to indicate how to proceed:
-     - 0 => success; abort chain
-     - (+)EAGAIN => success; proceed with next in chain
-     - (+)ENOTSUP => don't handle this; proceed with next
-     - negative error code = serious error; abort chain and report
-     - positive error code = error; continue with next in chain, no report
-   */
   insight_plugin *p=NULL;
   int res;
 
@@ -123,6 +192,14 @@ int plugin_process_import(const char *original_path, const char *filename) {
 }
 
 
+/**
+ * Load a plugin, retrieve its function pointers, call its initialiser,
+ * retrieve its capabilities, and add it to the global list.
+ *
+ * @param plugin_dir      The directory containing the plugin, without a trailing slash.
+ * @param plugin_filename The filename for the plugin, to be appended to \a plugin_dir.
+ * @return Zero on success, a negative error code on failure.
+ */
 int plugin_load(const char *plugin_dir, const char *plugin_filename) {
   char *fullpath = calloc(strlen(plugin_dir) + strlen(plugin_filename) + 2, sizeof(char));
   strcpy(fullpath, plugin_dir);
@@ -179,18 +256,25 @@ int plugin_load(const char *plugin_dir, const char *plugin_filename) {
   return 0;
 }
 
+/**
+ * Load all of the plugins in the given directory.
+ *
+ * @param plugin_dir The full path to the directory to process.
+ * @return Zero on success, negative error code on failure.
+ */
 int plugin_load_all(const char *plugin_dir) {
   DIR *p = opendir(plugin_dir);
   if (p == NULL) {
     FMSG(LOG_WARNING, "Error opening plugin directory \"%s\": %s", plugin_dir, strerror(errno));
-    return 1;
+    return -ENOENT;
   }
 
   struct dirent *de = NULL;
   while ((de = readdir(p)) != NULL) {
     /* checking if file begins with plugin prefix */
     char *needle = strstr(de->d_name, INSIGHT_PLUGIN_PREFIX);
-    if ((needle == NULL) || (needle != de->d_name)) continue;
+    if ((needle == NULL) || (needle != de->d_name))
+      continue;
 
     needle = strstr(de->d_name, PLUGIN_EXT);
     if ((needle == NULL) || (needle != de->d_name + strlen(de->d_name) - strlen(PLUGIN_EXT)))
@@ -208,7 +292,10 @@ int plugin_load_all(const char *plugin_dir) {
   return 0;
 }
 
-int plugin_unload_all() {
+/**
+ * Unload all plugins, calling their cleanup functions, etc.
+ */
+void plugin_unload_all() {
   insight_plugin *p=insight.plugins;
   insight.plugins=NULL;
   while (p) {
@@ -219,5 +306,4 @@ int plugin_unload_all() {
     ifree(p);
     p=pnext;
   }
-  return 0;
 }

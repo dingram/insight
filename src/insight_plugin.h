@@ -53,20 +53,29 @@
 typedef unsigned long fileptr;
 #endif
 
+/**
+ * A set of pointers to common functions that plugins may want to use
+ */
 typedef struct insight_funcs {
-  int (*add_tag)(fileptr, const char *);
-  int (*add_auto_tag)(fileptr, const char *);
-  int (*del_tag)(fileptr, const char *);
-  int (*del_auto_tag)(fileptr, const char *);
-  fileptr (*get_inode)(const char *);
+  int (*add_tag)(fileptr, const char *);       /**< Apply a generic tag to a file. */
+  int (*add_auto_tag)(fileptr, const char *);  /**< Apply a special "auto" tag to a file that cannot be set/unset by the user. */
+  int (*del_tag)(fileptr, const char *);       /**< Remove a generic tag from a file. */
+  int (*del_auto_tag)(fileptr, const char *);  /**< Remove a special "auto" tag from a file that cannot be set/unset by the user. */
+  fileptr (*get_inode)(const char *);          /**< Retrieve the inode for a given file name/path */
 
-  void (*log)(int, const char*, ...);
+  void (*log)(int, const char*, ...);          /**< Logging function (i.e. insight_log()) */
 } insight_funcs;
 
+/** Plugin cannot perform the action */
 #define INSIGHT_CAP_CANNOT  0
+/** Plugin can perform the action for file types listed in transduce_mime_types and transduce_exts */
 #define INSIGHT_CAP_CAN     1
+/** Plugin can perform the action for all files */
 #define INSIGHT_CAP_CAN_ALL 2
 
+/**
+ * Information about a plugin's capabilities.
+ */
 typedef struct insight_plugin_caps {
   int interface_version;                /**< Interface version supported by this plugin */
   unsigned int can_transduce_import:2;  /**< Can transduce files on import */
@@ -79,20 +88,23 @@ typedef struct insight_plugin_caps {
   char **transduce_exts;                /**< Array of file extension the plugin can handle, terminated by NULL pointer */
 } insight_plugin_caps;
 
+/**
+ * Internal information about a plugin
+ */
 typedef struct insight_plugin {
-  char *path;
-  void *dlhandle;
+  char *path;     /**< The path to the loadable object */
+  void *dlhandle; /**< The handle provided by dlopen() */
   /* ***** function pointers begin ********************************************/
-  int (*init)(insight_plugin_caps *, insight_funcs *);
-  int (*chmod)(const char *, const char *, mode_t);
-  int (*chown)(const char *, const char *, uid_t, gid_t);
-  int (*write)(const char *, const char *);
-  int (*rename)(const char *, const char *, const char *);
-  int (*import)(const char *, const char *);
-  void (*cleanup)();
+  int (*init)(insight_plugin_caps *, insight_funcs *);     /**< Called when the plugin is loaded. The plugin may want to store insight_funcs, and should fill information in insight_plugin_caps. This function must exist. */
+  int (*chmod)(const char *, const char *, mode_t);        /**< Called when a file is chmod()ed, if the plugin supports this operation. */
+  int (*chown)(const char *, const char *, uid_t, gid_t);  /**< Called when a file is chown()ed, if the plugin supports this operation. */
+  int (*write)(const char *, const char *);                /**< Called when a file is written, if the plugin supports this operation. */
+  int (*rename)(const char *, const char *, const char *); /**< Called when a file is renamed, if the plugin supports this operation. */
+  int (*import)(const char *, const char *);               /**< Called when a file is imported, if the plugin supports this operation. */
+  void (*cleanup)();                                       /**< Called when the plugin is about to be unloaded. The plugin should perform any necessary cleanup and free memory, etc here. */
   /* *****  function pointers end  ********************************************/
-  insight_plugin_caps caps;
-  struct insight_plugin *next;
+  insight_plugin_caps caps;    /**< The plugin's capabilities (retrieved by init) */
+  struct insight_plugin *next; /**< The next plugin in the list */
 } insight_plugin;
 
 #endif

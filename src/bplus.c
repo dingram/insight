@@ -17,6 +17,13 @@
 #include <set_ops.h>
 #include <insight.h>
 
+/**
+ * Dump a single tree block (and its related blocks) to the given file
+ * descriptor in Graphviz DOT format.
+ *
+ * @param target File descriptor to write to
+ * @param root   Block to examine
+ */
 void tree_dump_dot_item(FILE *target, fileptr root) {
   tblock block;
 
@@ -131,6 +138,13 @@ void tree_dump_dot_item(FILE *target, fileptr root) {
   }
 }
 
+/**
+ * Dump the entire tree from the given root to the given file descriptor in
+ * Graphviz DOT format.
+ *
+ * @param target The file descriptor to write to.
+ * @param root   The root node for the resulting graph.
+ */
 void tree_dump_dot(FILE *target, fileptr root) {
   fprintf(target, "digraph btree {\n");
   fprintf(target, "pad=0.3;\n");
@@ -138,6 +152,15 @@ void tree_dump_dot(FILE *target, fileptr root) {
   fprintf(target, "}\n");
 }
 
+/**
+ * Dump the entire tree from the given root to the given file descriptor in a
+ * plain-text representation. Note that each successive level will be indented
+ * by two spaces.
+ *
+ * @param target The file descriptor to write to.
+ * @param root   The starting root node.
+ * @param indent The starting indent level (most likely zero)
+ */
 void tree_dump_tree(FILE *target, fileptr root, int indent) {
   tblock block;
   char ind[indent+1];
@@ -1110,8 +1133,12 @@ fileptr tree_search(const char *key) {
   return tree_sub_search(tree_sb->root_index, key);
 }
 
-/*
- * search tree with given root for given key and return data block index
+/**
+ * Search given subtree for given key and return data block index associated with it.
+ *
+ * @param root The root index of the subtree to search.
+ * @param key  The key to used for the search.
+ * @returns The index of the data block on success, or zero on failure (and sets errno).
  */
 fileptr tree_sub_search(fileptr root, const char *key) {
   tnode node;
@@ -1162,8 +1189,18 @@ fileptr tree_sub_search(fileptr root, const char *key) {
   return node.ptrs[index];
 }
 
-/*
- * insert a key into the given node
+/**
+ * Insert a key into the given node, splitting as required.
+ *
+ * @param node     The node we're inserting the key into
+ * @param keyindex The index the key should have in this node
+ * @param key      A pointer to the key to insert, filled with the promoted key
+ *                 if we split
+ * @param ptr      The pointer value to associate with the key, filled with the
+ *                 index of the new block if we split
+ * @return Zero if the insertion was a success, or non-zero if we split. Will
+ * also return zero if an error occurred, so check errno (?)
+ * @todo Change return value on error (after checking implications elsewhere)
  */
 static int tree_insert_key(tnode *node, unsigned int keyindex, char **key, fileptr *ptr) {
   fileptr ptrs[ORDER+1];
@@ -1252,8 +1289,18 @@ static int tree_insert_key(tnode *node, unsigned int keyindex, char **key, filep
   return countdiff;
 }
 
-/*
- * Recursively insert a pointer into the tree
+/**
+ * Recursively insert a pointer into the tree.
+ *
+ * @param root The root of the tree we should insert into (if a data node, we
+ *             use its subkeys value)
+ * @param key  A pointer to the key to insert, filled with the promoted key if
+ *             we split
+ * @param ptr  The pointer value to associate with the key, filled with the
+ *             index of the new block if we split
+ * @return Zero if the insert succeeded, or a non-zero value if it succeeded
+ * but caused a split. Will also return zero on error, so check errno (?)
+ * @todo Change return value on error (after checking implications elsewhere)
  */
 static int tree_insert_recurse (fileptr root, char **key, fileptr *ptr) {
   tnode node;
@@ -1326,19 +1373,26 @@ static int tree_insert_recurse (fileptr root, char **key, fileptr *ptr) {
   return tmp;
 }
 
-/*
- * insert a data block into the tree with the given key
+/**
+ * Insert a data block into the root tree with the given key.
+ *
+ * @param key  The key to insert into the tree
+ * @param data The data that should be associated with the key
+ * @sa tree_sub_insert()
  */
 fileptr tree_insert (const tkey key, tblock *data) {
   DEBUG("Inserting into root tree with key \"%s\"", key);
   return tree_sub_insert(0, key, data);
 }
 
-/*
- * Insert a data block into the tree starting from the given DATA node. The \a
- * root argument should be 0 if we are inserting at the top level.
+/**
+ * Insert a data block into the tree starting from the given \b data node. The
+ * \a root argument should be 0 if we are inserting at the top level.
  *
- * @param root The index of the \b DATA node
+ * @param root The index of the \b data node
+ * @param key  The key to insert into the tree
+ * @param data The data that should be associated with the key
+ * @return The index of the new data block, or zero if an error occurred
  */
 fileptr tree_sub_insert(fileptr root, const tkey key, tblock *data) {
   fileptr newnode;
@@ -1477,8 +1531,8 @@ static int tree_remove_key(tnode *node, int keyindex, char **key) {
   return ((node->keycount < ORDER/2)?1:0) | ((keyindex==1)?2:0);
 }
 
-/*
- * Recursively remove a pointer from the tree
+/**
+ * Recursively remove a pointer from the tree.
  */
 static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
   tnode node;
@@ -1721,16 +1775,25 @@ static int tree_remove_recurse (fileptr root, char **key, fileptr *ptr) {
   return tmp;
 }
 
-/*
- * Remove a node and any associated inode blocks
+/**
+ * Remove a data block associated with the given key in the top-level tree, as
+ * well as any associated inode blocks.
+ *
+ * @param key The key to remove
+ * @return See tree_sub_remove()
  */
 int tree_remove (const tkey key) {
   DEBUG("Removing key \"%s\" from root tree", key);
   return tree_sub_remove(0, key);
 }
 
-/*
- * Remove a node from the given subtree and any associated inode blocks
+/**
+ * Remove a data block associated with the given key in the given subtree, as
+ * well as any associated inode blocks.
+ *
+ * @param root The index of the subtree root
+ * @param key  The key to remove
+ * @return Zero on success, or a negative error code on failure.
  */
 int tree_sub_remove(fileptr root, const tkey key) {
   fileptr ptr=0;
@@ -2266,6 +2329,15 @@ int inode_put_all(fileptr block, fileptr *inodes, unsigned int count) {
   return 0;
 }
 
+/**
+ * Callback function mapped across a tree to get all of the associated inodes.
+ *
+ * @param key  The key for the current item
+ * @param ptr  The pointer associated with the current item
+ * @param data User-defined data (in this case, a pointer to an anonymous
+ *             struct containing the number of inodes and an array of inodes)
+ * @return Zero on success, or <tt>-EIO</tt> on failure.
+ */
 static int _rec_inode_func(const char *key, const fileptr ptr, void *data) {
   struct {
     int count;

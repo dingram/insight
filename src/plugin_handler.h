@@ -48,6 +48,6 @@ int plugin_process_import(const char *original_path, const char *filename);
 /* load/unload plugins */
 int plugin_load(const char *plugin_dir, const char *plugin_filename);
 int plugin_load_all(const char *plugin_dir);
-int plugin_unload_all();
+void plugin_unload_all();
 
 #endif

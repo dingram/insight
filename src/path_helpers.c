@@ -45,7 +45,7 @@
  *  - <tt>/tag:/subtag/</tt>
  *  - <tt>/tag/:/subtag/</tt>
  *
- * Each of these is converted to the canonical form <tt>/tag.subtag/</tt>. This
+ * Each of these is converted to the canonical form <tt>/tag`subtag/</tt>. This
  * function also removes any leading or trailing slashes.
  *
  * @param path The path to be made canonical.
@@ -236,11 +236,25 @@ int validate_path(const char *path) {
   return isvalid;
 }
 
+/**
+ * Checks to see if the given path exists.
+ *
+ * @param path The path to check.
+ * @return Zero if \a path does not exist, non-zero otherwise.
+ */
 int checkdir(const char *path) {
   struct stat dst;
   return !((lstat(path, &dst) == -1) && (errno == ENOENT));
 }
 
+/**
+ * Checks to see if the given directory exists, and creates it if necessary.
+ *
+ * @param path The path to check.
+ * @retval 0 if \a path exists and is a directory, or if it was created.
+ * @retval 1 if \a path does not exist and could not be created.
+ * @retval 2 if \a path exists but is not a directory.
+ */
 int check_mkdir(const char *path) {
   struct stat dst;
 
@@ -252,7 +266,7 @@ int check_mkdir(const char *path) {
     }
     return 0;
   } else if (!S_ISDIR(dst.st_mode)) {
-    FMSG(LOG_ERR, "Default Insight directory %s exists but must be a directory!\n\n", path);
+    FMSG(LOG_ERR, "Path %s exists but must be a directory!\n\n", path);
     return 2;
   }
   return 0;
@@ -298,6 +312,13 @@ char *gen_repos_path(const char *hash, int create) {
   return finaldest;
 }
 
+/**
+ * Search the inode limbo list for a given inode and return its 1-based
+ * position in the list if found.
+ *
+ * @param inode The inode to search for.
+ * @returns The index in the limbo list + 1 if found, or zero if not.
+ */
 static int limbo_search(fileptr inode) {
   profile_init_start();
   fileptr *inodes=NULL;
@@ -324,16 +345,37 @@ static int limbo_search(fileptr inode) {
   return (i<count)?(i+1):0;
 }
 
+/**
+ * Check to see if we have a file with the given hash in the inode tree or in
+ * the inode limbo list.
+ *
+ * @param hash The hash to search for
+ * @return Zero if not found, otherwise non-zero.
+ */
 int have_file_by_hash(const unsigned long hash) {
   char s_hash[9];
   hex_to_string(s_hash, hash);
   return tree_sub_search(tree_get_iroot(), s_hash) || limbo_search(hash)>0;
 }
 
+/**
+ * Check to see if we have a file with the given name in the inode tree or in
+ * the inode limbo list.
+ *
+ * @param hash The filename to search for
+ * @return Zero if not found, otherwise non-zero.
+ */
 inline int have_file_by_name(const char *path) {
   return have_file_by_hash(hash_path(path));
 }
 
+/**
+ * Retrieve the stat the file with the given hash, if available.
+ *
+ * @param[in]  hash  The hash of the file we want to retrieve.
+ * @param[out] fstat A pointer to a <tt>struct stat</tt> that should be filled.
+ * @return Zero if the file was not found, non-zero otherwise.
+ */
 inline int get_file_link_by_shash(const char *hash, struct stat *fstat) {
   char *filepath = gen_repos_path(hash, 0);
   if (!filepath) return 0;
@@ -343,16 +385,36 @@ inline int get_file_link_by_shash(const char *hash, struct stat *fstat) {
   return ret;
 }
 
+/**
+ * Retrieve the stat for the file with the given hash, if available.
+ *
+ * @param[in]  hash  The hash of the file we want to retrieve.
+ * @param[out] fstat A pointer to a <tt>struct stat</tt> that should be filled.
+ * @return See get_file_link_by_shash()
+ */
 inline int get_file_link_by_hash(const unsigned long hash, struct stat *fstat) {
   char s_hash[9];
   hex_to_string(s_hash, hash);
   return get_file_link_by_shash(s_hash, fstat);
 }
 
+/**
+ * Retrieve the stat for the file with the given filename, if available.
+ *
+ * @param[in]  hash  The name of the file we want to retrieve.
+ * @param[out] fstat A pointer to a <tt>struct stat</tt> that should be filled.
+ * @return See get_file_link_by_hash()
+ */
 inline int get_file_link_by_name(const char *path, struct stat *fstat) {
   return get_file_link_by_hash(hash_path(path), fstat);
 }
 
+/**
+ * Retrieve the basename of the real file from its inode.
+ *
+ * @param inode The inode to use.
+ * @return The file's basename, or NULL if we could not get the full name.
+ */
 char *basename_from_inode(const fileptr inode) {
   char *linkres = fullname_from_inode(inode);
   if (!linkres) {
@@ -368,6 +430,12 @@ char *basename_from_inode(const fileptr inode) {
   return answer;
 }
 
+/**
+ * Retrieve the full path of the real file from its inode.
+ *
+ * @param inode The inode to use.
+ * @return The file's full name, or NULL if we could not get it.
+ */
 char *fullname_from_inode(const fileptr inode) {
   char hash[9];
   hex_to_string(hash, inode);
@@ -433,6 +501,14 @@ static int _sibcallback(const char *key, const fileptr val, void *data) {
   return 0;
 }
 
+/**
+ * Retrieve the list of subkeys for a given path, removing duplicates mentioned
+ * earlier in the path.
+ *
+ * @param[in]  path  The path for which subkeys should be generated, which must end in INSIGHT_SUBKEY_IND_C
+ * @param[out] count The number of subkeys in the list.
+ * @return An array of subkeys.
+ */
 char **path_get_subkeys(const char *path, unsigned int *count) {
 /* Basically:
  *  - build list of all directories in path
@@ -529,6 +605,15 @@ char **path_get_subkeys(const char *path, unsigned int *count) {
 #include <debug.h>
 #endif
 
+/**
+ * Retrieve the list of directories that should appear in the given path,
+ * removing duplicates and optimising names as necessary. This will call
+ * path_get_subkeys() if the path ends in INSIGHT_SUBKEY_IND_C.
+ *
+ * @param[in]  path  The path for which we should generate a directory list.
+ * @param[out] count The number of directories in the list.
+ * @return An array of directory names.
+ */
 char **path_get_dirs(const char *path, unsigned int *count) {
   unsigned int i;
 

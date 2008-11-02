@@ -31,6 +31,16 @@
 #include <insight_log.h>
 #include <stdarg.h>
 
+/**
+ * Common logging function. Depending on whether _MSG_STDERR is defined, will
+ * log either to <tt>stderr</tt>/<tt>stdout</tt> or syslog. This function will
+ * automatically append a newline to the message.
+ *
+ * @param lvl The logging level. Anything LOG_WARNING or more serious will be
+ *            logged to <tt>stderr</tt>, otherwise it will be logged to
+ *            <tt>stdout</tt>.
+ * @param fmt The printf()-style format for the log message.
+ */
 void insight_log(int lvl, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);

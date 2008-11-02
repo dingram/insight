@@ -44,6 +44,6 @@ int insight_plugin_rename(const char *realpath, const char *oldname, const char 
   (void) realpath;
   (void) oldname;
   (void) newname;
-  insight->log(LOG_INFO, "auto_group: rename()");
+  insight->log(LOG_INFO, "auto_ext: rename()");
   return EAGAIN;
 }

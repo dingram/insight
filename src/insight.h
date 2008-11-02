@@ -127,10 +127,13 @@ struct insight {
   struct insight_funcs funcs; /**< Set of functions for export to plugins */
 };
 
+/**
+ * A global structure containing information about this Insight instance.
+ */
 /*extern*/ struct insight insight;
 
 #ifndef ifree
-/** free() with guard to avoid double-freeing anything */
+/** free() with guard to try to avoid double-freeing anything */
 #define ifree(x) do {\
 	if (x) {\
 		free(x);\
@@ -141,4 +144,4 @@ struct insight {
 } while (0)
 #endif
 
-void insight_log(int level, const char *format, ...);
+#include <insight_log.h>
