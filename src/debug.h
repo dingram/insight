@@ -8,23 +8,6 @@
 #define LMSG(l, f, ...) MSG(l, "%s:%d: " f, __FILE__, __LINE__,## __VA_ARGS__)
 #define PMSG(l, f, ...) MSG(l, "%s:%d:%s: " f, __FILE__, __LINE__, __FUNCTION__,## __VA_ARGS__)
 
-/** @cond */
-#ifdef _DEBUG
-# define DEBUG(f, ...)  PMSG(LOG_DEBUG, f,## __VA_ARGS__)
-# define DEBUGMSG(x)    DEBUG("%s", x)
-# define DUMPINT(x)     DEBUG("%s = %d", #x, x)
-# define DUMPUINT(x)    DEBUG("%s = %u", #x, x)
-# define DUMPFILEPTR(x) DEBUG("%s = %lu", #x, x)
-# define DUMPSTR(x)     DEBUG("%s = \"%s\"", #x, x)
-#else
-# define DEBUG(f, ...)
-# define DEBUGMSG(x)
-# define DUMPINT(x)
-# define DUMPUINT(x)
-# define DUMPFILEPTR(x)
-# define DUMPSTR(x)
-#endif
-
 #define COL_RED     "\033[1;31m"
 #define COL_GREEN   "\033[1;32m"
 #define COL_YELLOW  "\033[1;33m"
@@ -65,4 +48,30 @@
 # define profile_stopf(f,...)
 #endif
 
+#endif
+
+#ifdef DEBUG
+# undef DEBUG
+# undef DEBUGMSG
+# undef DUMPINT
+# undef DUMPUINT
+# undef DUMPFILEPTR
+# undef DUMPSTR
+#endif
+
+/** @cond */
+#ifdef _DEBUG
+# define DEBUG(f, ...)  PMSG(LOG_DEBUG, f,## __VA_ARGS__)
+# define DEBUGMSG(x)    DEBUG("%s", x)
+# define DUMPINT(x)     DEBUG("%s = %d", #x, x)
+# define DUMPUINT(x)    DEBUG("%s = %u", #x, x)
+# define DUMPFILEPTR(x) DEBUG("%s = %lu", #x, x)
+# define DUMPSTR(x)     DEBUG("%s = \"%s\"", #x, x)
+#else
+# define DEBUG(f, ...)
+# define DEBUGMSG(x)
+# define DUMPINT(x)
+# define DUMPUINT(x)
+# define DUMPFILEPTR(x)
+# define DUMPSTR(x)
 #endif

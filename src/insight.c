@@ -2378,9 +2378,7 @@ void sig_dump_tree()
   setbuf(stdout, NULL);
   signal(SIGUSR1, sig_dump_tree);
   fflush(stdout);
-  printf(">>> SIGUSR1 >>>--------: Received SIGUSR1; dumping tree ----------------------\n");
-  tree_dump_tree(0, 0);
-  printf("<<< SIGUSR1 <<<--------: Tree dump complete ----------------------------------\n");
+  tree_dump_dot(stdout, 0);
   fflush(stdout);
 }
 #endif

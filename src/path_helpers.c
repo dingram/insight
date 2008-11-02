@@ -410,7 +410,7 @@ static int _sibcallback(const char *key, const fileptr val, void *data) {
     int cur;
     int sibcount;
   } *thing = data;
-  if (thing->cur >= thing->sibcount) {
+  if (thing->cur > thing->sibcount) {
     PMSG(LOG_ERR, "\033[1;31mSERIOUS ERROR\033[m");
     PMSG(LOG_ERR, "\033[1;31mcur: %d; sibcount: %d\033[m", thing->cur, thing->sibcount);
     return -1;
@@ -522,6 +522,12 @@ char **path_get_subkeys(const char *path, unsigned int *count) {
   ifree(prefix);
   return sibset;
 }
+
+#if defined(_DEBUG_PATH_DIRS) && !defined(_DEBUG)
+#define _DEBUG_ONCE
+#define _DEBUG
+#include <debug.h>
+#endif
 
 char **path_get_dirs(const char *path, unsigned int *count) {
   unsigned int i;
@@ -673,3 +679,9 @@ char **path_get_dirs(const char *path, unsigned int *count) {
   *count = out_count;
   return outset;
 }
+
+#if defined(_DEBUG_PATH_DIRS) && defined(_DEBUG_ONCE)
+#undef _DEBUG_ONCE
+#undef _DEBUG
+#include <debug.h>
+#endif
