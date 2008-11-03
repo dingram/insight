@@ -8,6 +8,7 @@
 #define LMSG(l, f, ...) MSG(l, "%s:%d: " f, __FILE__, __LINE__,## __VA_ARGS__)
 #define PMSG(l, f, ...) MSG(l, "%s:%d:%s: " f, __FILE__, __LINE__, __FUNCTION__,## __VA_ARGS__)
 
+/** @cond */
 #define COL_RED     "\033[1;31m"
 #define COL_GREEN   "\033[1;32m"
 #define COL_YELLOW  "\033[1;33m"
@@ -75,3 +76,4 @@
 # define DUMPFILEPTR(x)
 # define DUMPSTR(x)
 #endif
+/** @endcond */

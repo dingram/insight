@@ -362,7 +362,7 @@ int have_file_by_hash(const unsigned long hash) {
  * Check to see if we have a file with the given name in the inode tree or in
  * the inode limbo list.
  *
- * @param hash The filename to search for
+ * @param path The filename to search for
  * @return Zero if not found, otherwise non-zero.
  */
 inline int have_file_by_name(const char *path) {
@@ -401,7 +401,7 @@ inline int get_file_link_by_hash(const unsigned long hash, struct stat *fstat) {
 /**
  * Retrieve the stat for the file with the given filename, if available.
  *
- * @param[in]  hash  The name of the file we want to retrieve.
+ * @param[in]  path  The name of the file we want to retrieve.
  * @param[out] fstat A pointer to a <tt>struct stat</tt> that should be filled.
  * @return See get_file_link_by_hash()
  */

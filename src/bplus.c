@@ -1998,7 +1998,7 @@ int tree_get_all_keys(fileptr root, tkey *keys, unsigned int max) {
 /**
  * Get the length of the fully-qualified key for the given data block.
  *
- * @param fileptr dataptr The data block for which to retrieve the key length.
+ * @param dataptr The data block for which to retrieve the key length.
  * @return The length of the fully-qualified key.
  */
 size_t tree_get_full_key_len(fileptr dataptr) {
@@ -2020,7 +2020,7 @@ size_t tree_get_full_key_len(fileptr dataptr) {
 /**
  * Get the fully-qualified key for the given data block.
  *
- * @param fileptr dataptr The data block for which to retrieve the fully-qualified key.
+ * @param dataptr The data block for which to retrieve the fully-qualified key.
  * @return A pointer to the key that must be freed when no longer required.
  */
 char *tree_get_full_key(fileptr dataptr) {
