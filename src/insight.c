@@ -154,7 +154,7 @@ static int tag_ensure_create(const char *tag) {
   fileptr attrid;
   size_t len = strlen(tag);
   char *curtag=calloc(len+1, sizeof(char)); /* TODO: check for failure */
-  strcpy(curtag, tag);
+  strncpy(curtag, tag, len);
 
   /* loop backwards to find the closest parent tag that doesn't exist */
   /* i.e. check foo`bar`qux then foo`bar then foo */
@@ -1788,7 +1788,7 @@ static int insight_setxattr(const char *path, const char *name, const char *valu
     if (strncmp(name, "insight.", 8)==0) {
       DEBUG("Insight namespace attribute");
       char *attr = calloc(strlen(name)+strlen(value)+1, sizeof(char)); /* TODO: check for failure */
-      strcpy(attr, index(name, '.') + 1);
+      strncpy(attr, index(name, '.') + 1, strlen(name));
       if (strlen(value)) {
         strcat(attr, INSIGHT_SUBKEY_SEP);
         strcat(attr, value);
@@ -1918,7 +1918,7 @@ static int insight_listxattr(const char *path, char *list, size_t size) {
       if (list && size>=(size_t)res) {
         strcpy(&list[res], "insight");
       }
-      res += 8; /* "insight\0" */
+      res += strlen("insight") + 1;
 
       char *last = strlast(canon_path, '/');
       char s_hash[9];

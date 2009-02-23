@@ -31,7 +31,9 @@
  */
 
 /* need the LOG_* constants */
+#ifndef S_SPLINT_S
 #include <syslog.h>
+#endif
 /* need the E* constants */
 #include <errno.h>
 #include <sys/types.h>

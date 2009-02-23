@@ -33,19 +33,19 @@ void tree_dump_dot_item(FILE *target, fileptr root) {
       {
         tsblock *node = (tsblock*)&block;
         fprintf(target, "id%lu [label=\"SUPERBLOCK\\n" "v%d.%d\\n" "max_size: %lu\\n" "limbo count: %lu\", shape=\"box\", penwidth=3.0, style=\"filled\", fillcolor=\"#00ee33\"];\n", root, node->version>>8, node->version & 0xff, node->max_size, node->limbo_count);
-        if (node->root_index) {
+        if (node->root_index!=0) {
           fprintf(target, "id%lu -> id%lu [label=\"root\"];\n", root, node->root_index);
           fprintf(target, "  subgraph cluster_rootgraph {\n");
           tree_dump_dot_item(target, node->root_index);
           fprintf(target, "  }\n");
         }
-        if (node->inode_limbo) {
+        if (node->inode_limbo!=0) {
           fprintf(target, "id%lu -> id%lu [label=\"limbo\", constraint=\"false\"];\n", root, node->inode_limbo);
           fprintf(target, "  subgraph cluster_limbo {\n");
           tree_dump_dot_item(target, node->inode_limbo);
           fprintf(target, "  }\n");
         }
-        if (node->inode_root) {
+        if (node->inode_root!=0) {
           fprintf(target, "id%lu -> id%lu [label=\"inode\"];\n", root, node->inode_root);
           fprintf(target, "  subgraph cluster_inodetree {\n");
           tree_dump_dot_item(target, node->inode_root);
@@ -57,14 +57,14 @@ void tree_dump_dot_item(FILE *target, fileptr root) {
       {
         tnode *node = (tnode*)&block;
         unsigned int i;
-        fprintf(target, "id%lu [label=\"NODE %lu\\n" "keycount: %d\", shape=\"box\", style=\"filled\"", root, root, node->keycount);
-        if (node->leaf) {
+        fprintf(target, "id%lu [label=\"NODE %lu\\n" "keycount: %u\", shape=\"box\", style=\"filled\"", root, root, node->keycount);
+        if (node->leaf!=0) {
           fprintf(target, ", fillcolor=\"#ccccff\"");
         } else {
           fprintf(target, ", fillcolor=\"#9999ff\"");
         }
         fprintf(target, "];\n");
-        if (node->keycount && !node->leaf) {
+        if (node->keycount!=0 && !node->leaf) {
           fprintf(target, "id%lu -> id%lu [label=\"<%s\"];\n", root, node->ptrs[0], node->keys[0]);
           tree_dump_dot_item(target, node->ptrs[0]);
         }
@@ -72,7 +72,7 @@ void tree_dump_dot_item(FILE *target, fileptr root) {
           fprintf(target, "id%lu -> id%lu [label=\"%s\"];\n", root, node->ptrs[i+1], node->keys[i]);
           tree_dump_dot_item(target, node->ptrs[i+1]);
         }
-        if (node->leaf && node->ptrs[0]) {
+        if (node->leaf && node->ptrs[0]!=0) {
           fprintf(target, "id%lu -> id%lu [color=\"#ff7700\", constraint=false];\n", root, node->ptrs[0]);
         }
       }
@@ -80,8 +80,8 @@ void tree_dump_dot_item(FILE *target, fileptr root) {
     case MAGIC_DATANODE:
       {
         tdata *node = (tdata*)&block;
-        fprintf(target, "id%lu [label=\"DATA\\n" "name: %s\\n" "inodecount: %d\\n" "flags: %d\\n" "parent: %lu\", shape=\"box\", style=\"filled\", fillcolor=\"#ccff66\"];\n", root, node->name, node->inodecount, node->flags, node->parent);
-        if (node->subkeys) {
+        fprintf(target, "id%lu [label=\"DATA\\n" "name: %s\\n" "inodecount: %u\\n" "flags: %u\\n" "parent: %lu\", shape=\"box\", style=\"filled\", fillcolor=\"#ccff66\"];\n", root, node->name, node->inodecount, node->flags, node->parent);
+        if (node->subkeys!=0) {
           fprintf(target, "id%lu -> id%lu [label=\"subkeys\", color=\"#cc0000\"];\n", root, node->subkeys);
           tree_dump_dot_item(target, node->subkeys);
         }
@@ -92,7 +92,7 @@ void tree_dump_dot_item(FILE *target, fileptr root) {
         fprintf(target, "\n");
         fprintf(target, " next_inodes: %lu\n", node->next_inodes);
 #endif
-        if (node->next_inodes) {
+        if (node->next_inodes!=0) {
           fprintf(target, "id%lu -> id%lu [label=\"next_inodes\", color=\"#cc0000\", constraint=\"false\"];\n", root, node->next_inodes);
           tree_dump_dot_item(target, node->next_inodes);
         }
@@ -108,7 +108,7 @@ void tree_dump_dot_item(FILE *target, fileptr root) {
     case MAGIC_INODEBLOCK:
       {
         tinode *node = (tinode*)&block;
-        fprintf(target, "id%lu [label=\"INODE\\n" "inodecount: %d\", shape=\"box\", style=\"filled\", fillcolor=\"#cc66ff\"];\n", root, node->inodecount);
+        fprintf(target, "id%lu [label=\"INODE\\n" "inodecount: %u\", shape=\"box\", style=\"filled\", fillcolor=\"#cc66ff\"];\n", root, node->inodecount);
 #if 0
         fprintf(target, " inodes:");
         unsigned int i;
@@ -116,7 +116,7 @@ void tree_dump_dot_item(FILE *target, fileptr root) {
         fprintf(target, "\n");
         fprintf(target, " next_inodes: %lu\n", node->next_inodes);
 #endif
-        if (node->next_inodes) {
+        if (node->next_inodes!=0) {
           fprintf(target, "id%lu -> id%lu [label=\"next_inodes\", color=\"#cc0000\", constraint=\"false\"];\n", root, node->next_inodes);
           tree_dump_dot_item(target, node->next_inodes);
         }
@@ -125,7 +125,7 @@ void tree_dump_dot_item(FILE *target, fileptr root) {
     case MAGIC_INODEDATA:
       {
         tidata *node = (tidata*)&block;
-        fprintf(target, "id%lu [label=\"INODEDATA\\n" "refcount: %d\", shape=\"box\", style=\"filled\", fillcolor=\"#ffcc66\"];\n", root, node->refcount);
+        fprintf(target, "id%lu [label=\"INODEDATA\\n" "refcount: %u\", shape=\"box\", style=\"filled\", fillcolor=\"#ffcc66\"];\n", root, node->refcount);
 #if 0
         fprintf(target, " refcount: %d\n", node->refcount);
         fprintf(target, " refs:");
@@ -196,8 +196,8 @@ void tree_dump_tree(FILE *target, fileptr root, int indent) {
         tnode *node = (tnode*)&block;
         unsigned int i;
         fprintf(target, "%s [%lu:TREE NODE]\n", ind, root);
-        fprintf(target, "%s  leaf:     %d\n", ind, node->leaf);
-        fprintf(target, "%s  keycount: %d\n", ind, node->keycount);
+        fprintf(target, "%s  leaf:     %u\n", ind, node->leaf);
+        fprintf(target, "%s  keycount: %u\n", ind, node->keycount);
         fprintf(target, "%s  ptr[0]: %lu\n", ind, node->ptrs[0]);
         fprintf(target, "%s  keys:\n", ind);
         for(i=0;i<ORDER-1;i++) {
@@ -209,12 +209,13 @@ void tree_dump_tree(FILE *target, fileptr root, int indent) {
           }
         }
       }
+      break;
     case MAGIC_DATANODE:
       {
         tdata *node = (tdata*)&block;
         unsigned int i;
         fprintf(target, "%s [%lu:DATA NODE]\n", ind, root);
-        fprintf(target, "%s  inodecount:     %d\n", ind, node->inodecount);
+        fprintf(target, "%s  inodecount:     %u\n", ind, node->inodecount);
         fprintf(target, "%s  flags: %x\n", ind, node->flags);
         fprintf(target, "%s  subkeys: %lu\n", ind, node->subkeys);
         if (node->subkeys) {
@@ -243,7 +244,7 @@ void tree_dump_tree(FILE *target, fileptr root, int indent) {
         tinode *node = (tinode*)&block;
         unsigned int i;
         fprintf(target, "%s [%lu:INODE BLOCK]\n", ind, root);
-        fprintf(target, "%s  inodecount:     %d\n", ind, node->inodecount);
+        fprintf(target, "%s  inodecount:     %u\n", ind, node->inodecount);
         fprintf(target, "%s  inodes:", ind);
         for(i=0;i<INODE_MAX;i++) fprintf(target, (i>=node->inodecount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->inodes[i]);
         fprintf(target, "\n");
@@ -258,7 +259,7 @@ void tree_dump_tree(FILE *target, fileptr root, int indent) {
         tidata *node = (tidata*)&block;
         unsigned int i;
         fprintf(target, "%s [%lu:INODE DATA BLOCK]\n", ind, root);
-        fprintf(target, "%s  refcount: %d\n", ind, node->refcount);
+        fprintf(target, "%s  refcount: %u\n", ind, node->refcount);
         fprintf(target, "%s  refs:", ind);
         for(i=0;i<REF_MAX;i++) fprintf(target, (i>=node->refcount?" [\033[4m%08lX\033[m]":" [%08lX]"), node->refs[i]);
         fprintf(target, "\n");
@@ -330,7 +331,7 @@ static int tree_format () {
  */
 static int tree_format_free (fileptr start, fileptr size) {
   freeblock f;
-  fileptr result;
+  int result;
   unsigned int i;
 
   DEBUG("Zeroing free block structure");
@@ -338,7 +339,7 @@ static int tree_format_free (fileptr start, fileptr size) {
 
   DEBUG("Seeking to start");
   /* NOTE: not using tree_write() here because that would be seek overkill */
-  if (lseek(tree_fp, start * TREEBLOCK_SIZE, SEEK_SET)<0) {
+  if (lseek(tree_fp, (__off_t)(start * TREEBLOCK_SIZE), SEEK_SET)<0) {
     PMSG(LOG_ERR, "Seek failed: %s", strerror(errno));
     return EIO;
   }
@@ -386,7 +387,7 @@ static fileptr tree_alloc (void) {
 
   DEBUG("Allocating a block");
   errno=0;
-  if (!tree_sb->free_head) {
+  if (tree_sb->free_head==0) {
     PMSG(LOG_ERR, "But we don't have any free");
     errno=ENOMEM;
     return 0;
@@ -427,7 +428,7 @@ static int tree_free (fileptr block) {
   int result;
 
   errno=0;
-  if (!block) {
+  if (block==0) {
     PMSG(LOG_ERR, "Tried to free zero block!");
     return EINVAL;
   }

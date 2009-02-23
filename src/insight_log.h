@@ -40,7 +40,9 @@
 //#define MSG(l, f, ...)  fprintf((l<=LOG_WARNING)?stderr:stdout, f "\n",## __VA_ARGS__)
 #define INIT_LOG()
 #else
+#ifndef S_SPLINT_S
 #include <syslog.h>
+#endif
 //#define MSG(l, f, ...)  do { if (!insight.quiet) syslog(l, "%s: " f "\n", __FUNCTION__,## __VA_ARGS__) } while (0)
 #define INIT_LOG()      do { openlog("insight", LOG_PID, LOG_DAEMON); } while(0)
 #endif

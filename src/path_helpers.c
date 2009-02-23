@@ -284,7 +284,7 @@ char *gen_repos_path(const char *hash, int create) {
     PMSG(LOG_ERR, "Failed to allocate memory");
     return NULL;
   }
-  strcpy(finaldest, insight.repository);
+  strncpy(finaldest, insight.repository, insight.repository_len+strlen("/01/23/45/01234567")+1);
   char *finalptr = finaldest + insight.repository_len;
   /* finaldest guaranteed to exist so far */
   int i;
@@ -306,7 +306,7 @@ char *gen_repos_path(const char *hash, int create) {
   }
 
   *finalptr++ = '/';
-  strcpy(finalptr, hash);
+  strncpy(finalptr, hash, 8);
   DEBUG("Final repository path: \"%s\"", finaldest);
 
   return finaldest;

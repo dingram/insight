@@ -18,14 +18,14 @@
  * @defgroup MagicDefs Magic numbers
  */
 /*@{*/
-#define MAGIC_SUPERBLOCK  0x00bab10c /**< Superblock (uber block) */
-#define MAGIC_TREENODE    0xce11b10c /**< Internal tree node (cell block) */
-#define MAGIC_DATANODE    0xda7ab10c /**< Tree data node (data block) */
-#define MAGIC_FREEBLOCK   0xf1eeb10c /**< Free block (free block) */
-#define MAGIC_INODEBLOCK  0x10deb10c /**< Inode block (inode block) */
-#define MAGIC_INODEDATA   0x1d7ab10c /**< Inode tree data block */
-#define MAGIC_STRINGENTRY 0x7ec5b10c /**< String table entry (text block) [currently unused] */
-#define MAGIC_INODETABLE  0x7ab1b10c /**< Inode translation table entry (table block) [currently unused] */
+#define MAGIC_SUPERBLOCK  0x00bab10cU /**< Superblock (uber block) */
+#define MAGIC_TREENODE    0xce11b10cU /**< Internal tree node (cell block) */
+#define MAGIC_DATANODE    0xda7ab10cU /**< Tree data node (data block) */
+#define MAGIC_FREEBLOCK   0xf1eeb10cU /**< Free block (free block) */
+#define MAGIC_INODEBLOCK  0x10deb10cU /**< Inode block (inode block) */
+#define MAGIC_INODEDATA   0x1d7ab10cU /**< Inode tree data block */
+#define MAGIC_STRINGENTRY 0x7ec5b10cU /**< String table entry (text block) [currently unused] */
+#define MAGIC_INODETABLE  0x7ab1b10cU /**< Inode translation table entry (table block) [currently unused] */
 /*@}*/
 
 /** File format that this code will write */
